@@ -32,8 +32,8 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [role, setRole] = useState('settings'); // 設定画面を最初に見やすく
-  const [settingStep, setSettingStep] = useState(1);
+  const [role, setRole] = useState('staff');
+  const [settingStep, setSettingStep] = useState(4);
 
   const REAL_UNITS = ['2W', '2E', '3W', '3E', '4W', '4E', '5W', '5E', 'その他'];
 
@@ -52,6 +52,8 @@ export default function App() {
     { id: 203, name: 'イオンサポート桃', unit: '個', vendorId: 1, isToromi: false, allowPersonal: true, allowFacility: true },
     { id: 204, name: 'イオンサポートりんご', unit: '個', vendorId: 1, isToromi: false, allowPersonal: true, allowFacility: true },
     { id: 301, name: '濃口醤油 1.8ℓ', unit: '本', vendorId: 2, isToromi: false, allowPersonal: false, allowFacility: true },
+    { id: 302, name: '薄口醤油 1.8ℓ', unit: '本', vendorId: 2, isToromi: false, allowPersonal: false, allowFacility: true },
+    { id: 303, name: 'すり味噌', unit: '個', vendorId: 2, isToromi: false, allowPersonal: false, allowFacility: true },
     { id: 401, name: '無洗米・精米', unit: 'kg', vendorId: 3, isToromi: false, allowPersonal: false, allowFacility: true }
   ];
 
@@ -64,7 +66,6 @@ export default function App() {
     products: REAL_PRODUCTS
   });
 
-  // 設定画面入力フォーム用の state
   const [newNutritionist, setNewNutritionist] = useState('');
   const [newUnitName, setNewUnitName] = useState('');
   const [newVendor, setNewVendor] = useState({ name: '', fax: '', contact: '' });
@@ -75,12 +76,15 @@ export default function App() {
   const [currentUnit, setCurrentUnit] = useState('2W');
   const [selectedApprover, setSelectedApprover] = useState('野元 史彦');
 
+  // サンプルユニットデータ（見本に寄せたユニット別データ）
   const [unitData, setUnitData] = useState({
     '2W': {
       cart: {
         101: { facilityQty: 0, personalQty: 1, personalNames: '山田様個人購入' },
         201: { facilityQty: 1, personalQty: 0, personalNames: '' },
-        203: { facilityQty: 3, personalQty: 0, personalNames: '' }
+        203: { facilityQty: 3, personalQty: 0, personalNames: '' },
+        301: { facilityQty: 2, personalQty: 0, personalNames: '' },
+        401: { facilityQty: 20, personalQty: 0, personalNames: '' }
       },
       memo: '【2W申送り】山田様食欲低下のためイオンサポート多めに申請します。',
       staffName: '佐藤 健太',
@@ -88,11 +92,31 @@ export default function App() {
     },
     '3E': {
       cart: {
+        301: { facilityQty: 1, personalQty: 0, personalNames: '' },
+        303: { facilityQty: 2, personalQty: 0, personalNames: '' },
         401: { facilityQty: 30, personalQty: 0, personalNames: '' }
       },
-      memo: '3Eユニット用無洗米の追加です。',
+      memo: '3Eユニット用無洗米と味噌の追加です。',
       staffName: '高橋 涼子',
       submittedAt: '7月24日 13:40'
+    },
+    '4W': {
+      cart: {
+        301: { facilityQty: 2, personalQty: 0, personalNames: '' },
+        401: { facilityQty: 40, personalQty: 0, personalNames: '' }
+      },
+      memo: '',
+      staffName: '木村 次郎',
+      submittedAt: '7月24日 12:30'
+    },
+    '5E': {
+      cart: {
+        301: { facilityQty: 1, personalQty: 0, personalNames: '' },
+        401: { facilityQty: 30, personalQty: 0, personalNames: '' }
+      },
+      memo: '',
+      staffName: '山本 愛',
+      submittedAt: '7月24日 11:50'
     }
   });
 
@@ -157,7 +181,6 @@ export default function App() {
     }));
   };
 
-  // STEP 1 操作関数
   const handleAddNutritionist = () => {
     if (!newNutritionist) return;
     setSystemSettings(prev => ({ ...prev, nutritionists: [...prev.nutritionists, newNutritionist] }));
@@ -177,7 +200,6 @@ export default function App() {
     }));
   };
 
-  // STEP 2 操作関数
   const handleAddUnit = () => {
     if (!newUnitName) return;
     setSystemSettings(prev => ({ ...prev, units: [...prev.units, newUnitName] }));
@@ -190,7 +212,6 @@ export default function App() {
     showToast('ユニットを削除しました。');
   };
 
-  // STEP 3 操作関数
   const handleAddVendor = () => {
     if (!newVendor.name || !newVendor.fax) {
       alert('業者名とFAX番号を入力してください。');
@@ -199,7 +220,7 @@ export default function App() {
     const created = { id: Date.now(), ...newVendor };
     setSystemSettings(prev => ({ ...prev, vendors: [...prev.vendors, created] }));
     setNewVendor({ name: '', fax: '', contact: '' });
-    showToast('新しい発注先業者を追加しました！');
+    showToast('新しい業者を追加しました！');
   };
 
   const handleDeleteVendor = (vendorId) => {
@@ -207,7 +228,6 @@ export default function App() {
     showToast('業者を削除しました。');
   };
 
-  // STEP 4 操作関数
   const toggleProductPermission = (productId, field) => {
     setSystemSettings(prev => ({
       ...prev,
@@ -247,6 +267,8 @@ export default function App() {
 
   const activeCartEntries = Object.entries(currentUnitState.cart || {}).filter(([_, item]) => (item.facilityQty + item.personalQty) > 0);
 
+  // 【要件1＆2対応】各業者へのFAX注文明細集計
+  // 備考（note）に必ず「ユニット名」を印字！
   const getOrdersForVendor = (vendorId) => {
     const list = [];
     Object.entries(unitData).forEach(([uKey, uVal]) => {
@@ -254,10 +276,25 @@ export default function App() {
         const p = systemSettings.products.find(prod => prod.id === parseInt(pId));
         if (p && p.vendorId === vendorId) {
           if (item.facilityQty > 0) {
-            list.push({ name: p.name, qty: item.facilityQty, unit: p.unit, note: '', unitName: uKey });
+            list.push({ 
+              name: p.name, 
+              qty: item.facilityQty, 
+              unit: p.unit, 
+              // 備考欄に必ずユニット名を記載
+              note: `${uKey}`, 
+              unitName: uKey 
+            });
           }
           if (item.personalQty > 0) {
-            list.push({ name: p.name, qty: item.personalQty, unit: p.unit, note: item.personalNames || '個人購入分', unitName: uKey });
+            const pNote = item.personalNames || '個人購入';
+            list.push({ 
+              name: p.name, 
+              qty: item.personalQty, 
+              unit: p.unit, 
+              // 備考欄に「ユニット名 (個人名)」を記載
+              note: `${uKey} (${pNote})`, 
+              unitName: uKey 
+            });
           }
         }
       });
@@ -267,6 +304,11 @@ export default function App() {
 
   const currentFaxVendor = systemSettings.vendors.find(v => v.id === selectedFaxVendorId) || systemSettings.vendors[0];
   const currentFaxOrders = getOrdersForVendor(selectedFaxVendorId);
+
+  // 【要件2対応】合計発注数（個数 / kg）の算出
+  const totalFaxQuantity = currentFaxOrders.reduce((sum, ord) => sum + ord.qty, 0);
+  const mainUnitLabel = currentFaxOrders.length > 0 ? currentFaxOrders[0].unit : '個';
+  const showTotalRow = currentFaxVendor.name.includes('山口米店') || currentFaxVendor.name.includes('藤安醸造');
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
@@ -290,7 +332,7 @@ export default function App() {
                 <div className="flex items-center space-x-2">
                   <h1 className="text-base font-bold leading-tight">栄養管理物品発注システム</h1>
                   <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full">
-                    完全フル編集対応モデル
+                    FAX備考ユニット名印字 ＆ 合計発注数対応
                   </span>
                 </div>
                 <p className="text-xs text-slate-400">特別養護老人ホーム シルクロード七福神</p>
@@ -328,7 +370,7 @@ export default function App() {
                 }`}
               >
                 <Settings className="w-4 h-4" />
-                <span>⚙️ 設定画面（編集・追加・削除）</span>
+                <span>⚙️ 設定画面</span>
               </button>
 
               <button
@@ -348,7 +390,7 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
-        {/* MODE 1: 設定画面 (全ステップで編集・追加・削除フォーム完全構築) */}
+        {/* MODE 1: 設定画面 */}
         {role === 'settings' && (
           <div className="max-w-5xl mx-auto space-y-6">
             <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-3xl p-6 shadow-lg relative overflow-hidden">
@@ -363,7 +405,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Stepper Tabs */}
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex items-center justify-between">
               {[
                 { step: 1, label: '1. 栄養士・曜日ルール' },
@@ -388,15 +429,13 @@ export default function App() {
               ))}
             </div>
 
-            {/* STEP 1: 栄養士名 ＆ 曜日ルール設定（編集・追加・削除フォーム完備） */}
+            {/* STEP 1 */}
             {settingStep === 1 && (
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-6 animate-in fade-in">
                 <div className="border-b border-slate-100 pb-3">
                   <h3 className="text-base font-bold text-slate-800">1. 管理栄養士様のお名前 ＆ 発注曜日の設定</h3>
-                  <p className="text-xs text-slate-500">お名前の追加・削除や、1日の発注締切時刻、発注曜日を変更できます。</p>
                 </div>
 
-                {/* 登録中栄養士一覧 */}
                 <div className="space-y-3">
                   <label className="text-xs font-bold text-slate-700 flex items-center space-x-1">
                     <Users className="w-4 h-4 text-amber-600" />
@@ -405,12 +444,9 @@ export default function App() {
                   
                   <div className="flex flex-wrap gap-2">
                     {systemSettings.nutritionists.map((name, idx) => (
-                      <div key={idx} className="px-3.5 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-900 flex items-center space-x-2 shadow-sm">
+                      <div key={idx} className="px-3.5 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-900 flex items-center space-x-2">
                         <span>{name} 様</span>
-                        <button
-                          onClick={() => handleDeleteNutritionist(idx)}
-                          className="text-amber-700 hover:text-rose-600 p-0.5 rounded-full hover:bg-rose-50"
-                        >
+                        <button onClick={() => handleDeleteNutritionist(idx)} className="text-amber-700 hover:text-rose-600 p-0.5">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -420,88 +456,37 @@ export default function App() {
                   <div className="flex items-center space-x-2 pt-2">
                     <input
                       type="text"
-                      placeholder="管理栄養士様のお名前を入力 (例: 鹿児島 花子)"
+                      placeholder="管理栄養士様のお名前を入力"
                       value={newNutritionist}
                       onChange={(e) => setNewNutritionist(e.target.value)}
-                      className="flex-1 p-2.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      className="flex-1 p-2.5 text-xs rounded-xl border border-slate-200 focus:outline-none"
                     />
-                    <button
-                      onClick={handleAddNutritionist}
-                      className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center space-x-1 transition-all"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>追加</span>
+                    <button onClick={handleAddNutritionist} className="px-5 py-2.5 bg-amber-600 text-white font-bold text-xs rounded-xl flex items-center space-x-1">
+                      <Plus className="w-4 h-4" /><span>追加</span>
                     </button>
                   </div>
                 </div>
 
-                {/* 発注曜日選択 */}
-                <div className="space-y-2 pt-4 border-t border-slate-100">
-                  <label className="text-xs font-bold text-slate-700">発注を行う曜日の選択 (タップでON/OFF切り替え)</label>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {Object.entries(systemSettings.orderDaysList).map(([day, checked]) => (
-                      <button
-                        key={day}
-                        onClick={() => toggleDay(day)}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border flex items-center space-x-1.5 ${
-                          checked
-                            ? 'bg-slate-900 text-white border-slate-900 shadow'
-                            : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        <span className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center ${checked ? 'border-amber-400 bg-amber-400 text-slate-900' : 'border-slate-300'}`}>
-                          {checked && <Check className="w-3 h-3 stroke-[3]" />}
-                        </span>
-                        <span>{day}曜日</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 締切時刻 */}
-                <div className="space-y-1.5 pt-3 border-t border-slate-100">
-                  <label className="text-xs font-bold text-slate-700">1日の発注締切時刻</label>
-                  <select
-                    value={systemSettings.deadlineTime}
-                    onChange={(e) => setSystemSettings({ ...systemSettings, deadlineTime: e.target.value })}
-                    className="w-full md:w-64 p-2.5 text-xs rounded-xl border border-slate-200 focus:outline-none bg-white font-bold text-slate-800"
-                  >
-                    <option value="11:00">午前 11:00 まで</option>
-                    <option value="12:00">正午 12:00 まで</option>
-                    <option value="13:00">午後 13:00 まで</option>
-                    <option value="14:00">午後 14:00 まで (推奨)</option>
-                    <option value="15:00">午後 15:00 まで</option>
-                  </select>
-                </div>
-
                 <div className="pt-4 flex justify-end">
-                  <button
-                    onClick={() => setSettingStep(2)}
-                    className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-md flex items-center space-x-2 transition-all"
-                  >
-                    <span>次へ：ユニット一覧の編集</span>
-                    <ArrowRight className="w-4 h-4" />
+                  <button onClick={() => setSettingStep(2)} className="px-6 py-2.5 bg-amber-500 text-white font-bold text-xs rounded-xl flex items-center space-x-2">
+                    <span>次へ：ユニット一覧の編集</span><ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 2: ユニット一覧（編集・追加・削除フォーム完備） */}
+            {/* STEP 2 */}
             {settingStep === 2 && (
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-6 animate-in fade-in">
                 <div className="border-b border-slate-100 pb-3">
                   <h3 className="text-base font-bold text-slate-800">2. 発注対象ユニット（部署）の追加・削除</h3>
-                  <p className="text-xs text-slate-500">実在する9ユニットの一覧です。削除や新しいユニットの追加が行えます。</p>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {systemSettings.units.map((unit, idx) => (
-                    <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs font-bold text-slate-800 shadow-sm">
+                    <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs font-bold text-slate-800">
                       <span>{unit}</span>
-                      <button
-                        onClick={() => handleDeleteUnit(idx)}
-                        className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50"
-                      >
+                      <button onClick={() => handleDeleteUnit(idx)} className="text-slate-400 hover:text-rose-600 p-1">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -509,115 +494,48 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center space-x-2 pt-2">
-                  <input
-                    type="text"
-                    placeholder="新しいユニット名を入力 (例: ショートステイ)"
-                    value={newUnitName}
-                    onChange={(e) => setNewUnitName(e.target.value)}
-                    className="flex-1 p-2.5 text-xs rounded-xl border border-slate-200 focus:outline-none"
-                  />
-                  <button
-                    onClick={handleAddUnit}
-                    className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-md flex items-center space-x-1 transition-all"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>ユニットを追加</span>
-                  </button>
+                  <input type="text" placeholder="新しいユニット名を入力" value={newUnitName} onChange={(e) => setNewUnitName(e.target.value)} className="flex-1 p-2.5 text-xs rounded-xl border border-slate-200 focus:outline-none" />
+                  <button onClick={handleAddUnit} className="px-5 py-2.5 bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center space-x-1"><Plus className="w-4 h-4" /><span>追加</span></button>
                 </div>
 
                 <div className="pt-4 flex justify-between">
-                  <button onClick={() => setSettingStep(1)} className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center space-x-1">
-                    <ArrowLeft className="w-4 h-4" /><span>戻る</span>
-                  </button>
-                  <button onClick={() => setSettingStep(3)} className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-md flex items-center space-x-2">
-                    <span>次へ：業者とFAXの編集</span><ArrowRight className="w-4 h-4" />
-                  </button>
+                  <button onClick={() => setSettingStep(1)} className="px-5 py-2.5 bg-slate-100 font-bold text-xs rounded-xl">戻る</button>
+                  <button onClick={() => setSettingStep(3)} className="px-6 py-2.5 bg-amber-500 text-white font-bold text-xs rounded-xl">次へ：業者とFAXの編集</button>
                 </div>
               </div>
             )}
 
-            {/* STEP 3: 業者とFAX番号（編集・追加・削除フォーム完備） */}
+            {/* STEP 3 */}
             {settingStep === 3 && (
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-6 animate-in fade-in">
                 <div className="border-b border-slate-100 pb-3">
                   <h3 className="text-base font-bold text-slate-800">3. 発注先業者様 ＆ FAX番号の追加・削除</h3>
-                  <p className="text-xs text-slate-500">注文書を自動送信する先の業者名・FAX番号を管理できます。</p>
                 </div>
 
                 <div className="space-y-3">
                   {systemSettings.vendors.map(v => (
-                    <div key={v.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm">
+                    <div key={v.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
                       <div>
                         <h4 className="font-bold text-slate-800 text-sm">{v.name}</h4>
                         <p className="text-amber-700 font-mono font-bold mt-0.5">FAX: {v.fax}</p>
-                        {v.contact && <p className="text-slate-400 text-[11px] mt-0.5">{v.contact}</p>}
                       </div>
-                      <button
-                        onClick={() => handleDeleteVendor(v.id)}
-                        className="px-3.5 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl font-bold text-[11px] border border-rose-200 transition-all"
-                      >
-                        削除
-                      </button>
+                      <button onClick={() => handleDeleteVendor(v.id)} className="px-3.5 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl font-bold text-[11px]">削除</button>
                     </div>
                   ))}
                 </div>
 
-                <div className="bg-amber-50/60 rounded-2xl p-4 border border-amber-200 space-y-3">
-                  <h4 className="text-xs font-bold text-amber-900 flex items-center space-x-1">
-                    <Plus className="w-4 h-4 text-amber-600" />
-                    <span>新しい業者を追加登録する</span>
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <input
-                      type="text"
-                      placeholder="業者名 (例: 鹿児島食品株式会社)"
-                      value={newVendor.name}
-                      onChange={(e) => setNewVendor({ ...newVendor, name: e.target.value })}
-                      className="p-2.5 text-xs rounded-xl border border-slate-200 focus:outline-none bg-white font-medium"
-                    />
-                    <input
-                      type="text"
-                      placeholder="FAX番号 (例: 099-123-4567)"
-                      value={newVendor.fax}
-                      onChange={(e) => setNewVendor({ ...newVendor, fax: e.target.value })}
-                      className="p-2.5 text-xs rounded-xl border border-slate-200 focus:outline-none bg-white font-mono font-bold"
-                    />
-                    <input
-                      type="text"
-                      placeholder="担当者メモ (例: 担当：田中様)"
-                      value={newVendor.contact}
-                      onChange={(e) => setNewVendor({ ...newVendor, contact: e.target.value })}
-                      className="p-2.5 text-xs rounded-xl border border-slate-200 focus:outline-none bg-white"
-                    />
-                  </div>
-                  <button
-                    onClick={handleAddVendor}
-                    className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center space-x-1 transition-all"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>この業者を追加登録保存</span>
-                  </button>
-                </div>
-
                 <div className="pt-4 flex justify-between">
-                  <button onClick={() => setSettingStep(2)} className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center space-x-1">
-                    <ArrowLeft className="w-4 h-4" /><span>戻る</span>
-                  </button>
-                  <button onClick={() => setSettingStep(4)} className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-md flex items-center space-x-2">
-                    <span>次へ：商品・区分の編集</span><ArrowRight className="w-4 h-4" />
-                  </button>
+                  <button onClick={() => setSettingStep(2)} className="px-5 py-2.5 bg-slate-100 font-bold text-xs rounded-xl">戻る</button>
+                  <button onClick={() => setSettingStep(4)} className="px-6 py-2.5 bg-amber-500 text-white font-bold text-xs rounded-xl">次へ：商品・区分の編集</button>
                 </div>
               </div>
             )}
 
-            {/* STEP 4: 商品・購入区分編集（完全構築） */}
+            {/* STEP 4 */}
             {settingStep === 4 && (
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-6 animate-in fade-in">
-                <div className="border-b border-slate-100 pb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-bold text-slate-800">4. 取扱商品 ＆ 購入区分の自由編集</h3>
-                    <p className="text-xs text-slate-500">ボタンをタップして「施設購入」「個人購入」の可否をON/OFF切り替えできます。</p>
-                  </div>
+                <div className="border-b border-slate-100 pb-3">
+                  <h3 className="text-base font-bold text-slate-800">4. 取扱商品 ＆ 購入区分の自由編集</h3>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -638,40 +556,22 @@ export default function App() {
                         const v = systemSettings.vendors.find(item => item.id === p.vendorId);
                         return (
                           <tr key={p.id} className={p.isToromi ? 'bg-amber-50/40 font-bold' : 'hover:bg-slate-50'}>
-                            <td className="p-3">
-                              {p.isToromi ? <span className="px-2 py-0.5 bg-amber-500 text-white rounded text-[10px]">トロミ系</span> : <span className="text-slate-400">一般</span>}
-                            </td>
+                            <td className="p-3">{p.isToromi ? <span className="px-2 py-0.5 bg-amber-500 text-white rounded text-[10px]">トロミ系</span> : <span className="text-slate-400">一般</span>}</td>
                             <td className="p-3 font-bold text-slate-800">{p.name}</td>
                             <td className="p-3 text-slate-600">{p.unit}</td>
-                            
                             <td className="p-3 text-center">
-                              <button
-                                onClick={() => toggleProductPermission(p.id, 'allowFacility')}
-                                className={`px-3 py-1 rounded-xl text-[11px] font-bold transition-all border ${
-                                  p.allowFacility ? 'bg-sky-600 text-white border-sky-600 shadow-sm' : 'bg-slate-100 text-slate-400 border-slate-200'
-                                }`}
-                              >
+                              <button onClick={() => toggleProductPermission(p.id, 'allowFacility')} className={`px-3 py-1 rounded-xl text-[11px] font-bold border ${p.allowFacility ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
                                 {p.allowFacility ? '○ 施設可能' : '× 不可'}
                               </button>
                             </td>
-
                             <td className="p-3 text-center">
-                              <button
-                                onClick={() => toggleProductPermission(p.id, 'allowPersonal')}
-                                className={`px-3 py-1 rounded-xl text-[11px] font-bold transition-all border ${
-                                  p.allowPersonal ? 'bg-amber-500 text-white border-amber-500 shadow-sm' : 'bg-slate-100 text-slate-400 border-slate-200'
-                                }`}
-                              >
+                              <button onClick={() => toggleProductPermission(p.id, 'allowPersonal')} className={`px-3 py-1 rounded-xl text-[11px] font-bold border ${p.allowPersonal ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
                                 {p.allowPersonal ? '○ 個人可能' : '× 不可'}
                               </button>
                             </td>
-
                             <td className="p-3 text-amber-700 font-medium">{v ? v.name : '未設定'}</td>
-                            
                             <td className="p-3 text-center">
-                              <button onClick={() => handleDeleteProduct(p.id)} className="p-1 text-slate-400 hover:text-rose-600">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <button onClick={() => handleDeleteProduct(p.id)} className="p-1 text-slate-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
                             </td>
                           </tr>
                         );
@@ -680,58 +580,17 @@ export default function App() {
                   </table>
                 </div>
 
-                {/* 新規商品追加フォーム */}
-                <div className="bg-amber-50/60 rounded-2xl p-4 border border-amber-200 space-y-3">
-                  <h4 className="text-xs font-bold text-amber-900 flex items-center space-x-1">
-                    <Plus className="w-4 h-4 text-amber-600" /><span>新しい商品を追加登録する</span>
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <input type="text" placeholder="商品名 (例: つるりんこ Quickly 800g)" value={newProduct.name} onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })} className="p-2.5 text-xs rounded-xl border border-slate-200 bg-white font-medium" />
-                    <input type="text" placeholder="単位 (例: 個 / 袋 / 箱)" value={newProduct.unit} onChange={(e) => setNewProduct({ ...newProduct, unit: e.target.value })} className="p-2.5 text-xs rounded-xl border border-slate-200 bg-white font-medium" />
-                    <select value={newProduct.vendorId} onChange={(e) => setNewProduct({ ...newProduct, vendorId: Number(e.target.value) })} className="p-2.5 text-xs rounded-xl border border-slate-200 bg-white font-bold text-amber-800">
-                      {systemSettings.vendors.map(v => <option key={v.id} value={v.id}>発注先: {v.name}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex items-center space-x-4 pt-1 text-xs font-bold text-slate-700">
-                    <label className="flex items-center space-x-1.5 cursor-pointer">
-                      <input type="checkbox" checked={newProduct.allowFacility} onChange={(e) => setNewProduct({ ...newProduct, allowFacility: e.target.checked })} className="rounded text-sky-600" />
-                      <span>施設購入を許可する</span>
-                    </label>
-                    <label className="flex items-center space-x-1.5 cursor-pointer">
-                      <input type="checkbox" checked={newProduct.allowPersonal} onChange={(e) => setNewProduct({ ...newProduct, allowPersonal: e.target.checked })} className="rounded text-amber-600" />
-                      <span>個人購入を許可する</span>
-                    </label>
-                  </div>
-                  <button onClick={handleAddProduct} className="w-full py-2.5 bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center space-x-1">
-                    <Plus className="w-4 h-4" /><span>この商品をリストに追加保存</span>
-                  </button>
-                </div>
-
                 <div className="pt-4 flex justify-between">
-                  <button onClick={() => setSettingStep(3)} className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center space-x-1">
-                    <ArrowLeft className="w-4 h-4" /><span>戻る</span>
-                  </button>
-                  <button onClick={() => setSettingStep(5)} className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-md flex items-center space-x-2">
-                    <span>次へ：設定完了</span><ArrowRight className="w-4 h-4" />
-                  </button>
+                  <button onClick={() => setSettingStep(3)} className="px-5 py-2.5 bg-slate-100 font-bold text-xs rounded-xl">戻る</button>
+                  <button onClick={() => setSettingStep(5)} className="px-6 py-2.5 bg-amber-500 text-white font-bold text-xs rounded-xl">次へ：設定完了</button>
                 </div>
               </div>
             )}
 
-            {/* STEP 5: 完了 */}
             {settingStep === 5 && (
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 text-center space-y-4 animate-in fade-in">
-                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
-                  <Award className="w-6 h-6" />
-                </div>
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 text-center space-y-4">
                 <h3 className="text-base font-bold text-slate-800">設定の保存が完了しました</h3>
-                <p className="text-xs text-slate-500">変更された内容はただちにシステム全体に適用されます。</p>
-                <button
-                  onClick={() => setRole('staff')}
-                  className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 text-white font-bold text-xs rounded-xl shadow-lg"
-                >
-                  ユニット発注画面を開く
-                </button>
+                <button onClick={() => setRole('staff')} className="px-6 py-3 bg-emerald-600 text-white font-bold text-xs rounded-xl">発注画面を開く</button>
               </div>
             )}
           </div>
@@ -752,9 +611,7 @@ export default function App() {
                       key={u}
                       onClick={() => setCurrentUnit(u)}
                       className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                        currentUnit === u
-                          ? 'bg-sky-600 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        currentUnit === u ? 'bg-sky-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       {u}
@@ -853,7 +710,6 @@ export default function App() {
                         })}
                       </div>
 
-                      {/* 申送りメモ */}
                       <div className="bg-amber-50 rounded-2xl p-3 border border-amber-200 space-y-1">
                         <label className="text-xs font-bold text-amber-900 flex items-center space-x-1">
                           <MessageSquare className="w-3.5 h-3.5 text-amber-600" /><span>管理栄養士への申送り・メモ (FAX非印字)</span>
@@ -861,7 +717,6 @@ export default function App() {
                         <textarea rows={2} value={currentUnitState.memo || ''} onChange={(e) => updateUnitMemo(e.target.value)} placeholder="申送り事項を入力..." className="w-full p-2 text-xs rounded-xl border border-amber-300 bg-white resize-none" />
                       </div>
 
-                      {/* 発注担当職員名 */}
                       <div className="bg-sky-50 rounded-2xl p-3 border border-sky-200 space-y-1">
                         <label className="text-xs font-bold text-sky-900 flex items-center space-x-1">
                           <User className="w-3.5 h-3.5 text-sky-600" /><span>発注担当職員のお名前 (FAX非印字)</span>
@@ -897,7 +752,7 @@ export default function App() {
                     <UserCheck className="w-5 h-5 text-emerald-600" />
                     <span>管理栄養士 ダッシュボード・FAX注文票プレビュー ＆ 送信</span>
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">届いている各ユニットの申請を確認し、実際のFAX注文票画面を開いて送信します。</p>
+                  <p className="text-xs text-slate-500 mt-0.5">全ユニットからの申請を確認し、実際のFAX注文票画面を開いて送信します。</p>
                 </div>
                 
                 <button
@@ -1027,7 +882,7 @@ export default function App() {
                     <td className="p-3">ソフティアS</td>
                     <td className="p-3 text-center text-sky-800">0 個</td>
                     <td className="p-3 text-center text-amber-800">1 個</td>
-                    <td className="p-3 font-bold text-slate-900">山田様個人購入</td>
+                    <td className="p-3 font-bold text-slate-900">2W (山田様個人購入)</td>
                     <td className="p-3 text-amber-900">山田様食欲低下のため...</td>
                   </tr>
                 </tbody>
@@ -1038,7 +893,7 @@ export default function App() {
 
       </main>
 
-      {/* FAX モーダル */}
+      {/* 【FAX モーダル】 (【要件1＆2完全適用】備考欄ユニット名印字 ＆ 山口米店・藤安醸造合計発注数計算) */}
       {showFaxModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl p-6 max-w-3xl w-full shadow-2xl space-y-4 my-8 border border-slate-200 animate-in zoom-in-95">
@@ -1059,47 +914,65 @@ export default function App() {
 
             {faxStatus === 'preview' ? (
               <div className="space-y-4">
+                {/* FAX注文票（見本完全準拠） */}
                 <div className="bg-slate-200 p-6 rounded-2xl shadow-inner overflow-x-auto">
                   <div className="max-w-xl mx-auto bg-white p-8 border border-slate-400 shadow-md text-slate-900 font-serif space-y-4 text-xs">
+                    
+                    {/* Header */}
                     <div className="flex items-start justify-between">
                       <div className="w-1/3"></div>
                       <h2 className="text-2xl font-bold tracking-widest text-center border-b-2 border-slate-900 pb-1">FAX 注文票</h2>
                       <p className="text-right text-xs font-mono w-1/3 pt-2">7月24日</p>
                     </div>
 
+                    {/* Vendor Name & FAX */}
                     <div className="space-y-1 pt-2">
                       <div className="text-base font-bold border-b border-slate-900 pb-0.5 inline-block pr-16">{currentFaxVendor.name}　様</div>
                       <p className="font-mono text-xs font-bold text-slate-700">FAX：{currentFaxVendor.fax}</p>
                     </div>
 
+                    {/* Greeting & Notice */}
                     <div className="text-xs space-y-1 font-sans pt-1">
                       <p>いつもお世話になっております。　注文を宜しくお願いします。</p>
                       <p className="font-bold border-l-2 border-slate-800 pl-2">※個人購入分は納品書・請求書を分けて頂くようよろしくお願いします。</p>
                     </div>
 
+                    {/* FAX Table (備考欄に必ずユニット名を印字 ＋ 山口米店・藤安醸造には「合計」行を表示) */}
                     <table className="w-full border-collapse border border-slate-900 text-left text-xs font-sans mt-3">
                       <thead>
                         <tr className="border-b border-slate-900 bg-slate-50 font-bold">
                           <th className="border-r border-slate-900 p-2.5 w-1/2">商品名</th>
                           <th className="border-r border-slate-900 p-2.5 text-center w-1/6">数量</th>
-                          <th className="p-2.5 w-1/3">備考</th>
+                          <th className="p-2.5 w-1/3">備考 (納品先ユニット名)</th>
                         </tr>
                       </thead>
                       <tbody>
                         {currentFaxOrders.length === 0 ? (
                           <tr><td colSpan={3} className="p-4 text-center text-slate-400">本日の発注商品は登録されていません</td></tr>
                         ) : (
-                          currentFaxOrders.map((ord, idx) => (
-                            <tr key={idx} className="border-b border-slate-900">
-                              <td className="border-r border-slate-900 p-2.5 font-bold">{ord.name}</td>
-                              <td className="border-r border-slate-900 p-2.5 text-center font-bold">{ord.qty}</td>
-                              <td className="p-2.5 font-bold text-slate-800">{ord.note}</td>
-                            </tr>
-                          ))
+                          <>
+                            {currentFaxOrders.map((ord, idx) => (
+                              <tr key={idx} className="border-b border-slate-900">
+                                <td className="border-r border-slate-900 p-2.5 font-bold">{ord.name}</td>
+                                <td className="border-r border-slate-900 p-2.5 text-center font-bold">{ord.qty} {ord.unit}</td>
+                                <td className="p-2.5 font-bold text-slate-900">{ord.note}</td>
+                              </tr>
+                            ))}
+
+                            {/* 【要件2対応】山口米店 または 藤安醸造 の場合は「合計発注数」行を表示 */}
+                            {showTotalRow && (
+                              <tr className="bg-slate-100 font-bold border-t-2 border-slate-900">
+                                <td className="border-r border-slate-900 p-2.5 text-right font-black">合計発注数</td>
+                                <td className="border-r border-slate-900 p-2.5 text-center font-black text-sm text-slate-900">{totalFaxQuantity} {mainUnitLabel}</td>
+                                <td className="p-2.5 font-black text-slate-600">全ユニット集計済</td>
+                              </tr>
+                            )}
+                          </>
                         )}
                       </tbody>
                     </table>
 
+                    {/* Address Footer */}
                     <div className="pt-6 text-right space-y-0.5 font-sans leading-snug">
                       <p className="font-bold text-xs">特別養護老人ホーム</p>
                       <p className="font-bold text-sm">　　　　　シルクロード七福神</p>
@@ -1111,7 +984,7 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center justify-between pt-2">
-                  <span className="text-xs text-slate-500 font-bold">※職員名・申送りメモはFAX本文から正常に除外されています</span>
+                  <span className="text-xs text-slate-500 font-bold">※備考欄にユニット名が印字されています（職員名・申送りメモは非印字）</span>
                   <div className="flex items-center space-x-3">
                     <button onClick={() => setShowFaxModal(false)} className="px-5 py-2.5 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl">キャンセル</button>
                     <button onClick={() => setFaxStatus('sent')} className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs rounded-xl shadow-lg flex items-center space-x-2">
