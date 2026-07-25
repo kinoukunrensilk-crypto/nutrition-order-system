@@ -224,11 +224,12 @@ export default function App() {
     try {
       await fetch(gasUrl, {
         method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: 'bulkSubmit', items }),
         mode: 'no-cors'
       });
     } catch (err) {
-      // no-corsのため結果取得不可。エラーは無視して続行
+      console.error('GAS Send Error:', err);
     }
   };
 
