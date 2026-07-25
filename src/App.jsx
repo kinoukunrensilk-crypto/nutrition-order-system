@@ -89,8 +89,10 @@ export default function App() {
     products: REAL_PRODUCTS
   });
 
+  const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzBGq2YJLKiA5xBQh6eR26RmVmr32mgFVcSmdoq8ApclICp-dqPwxS4llehwvw20XIUSg/exec';
+
   const [gasUrl, setGasUrl] = useState(
-    localStorage.getItem('NUTRITION_GAS_URL') || ''
+    localStorage.getItem('NUTRITION_GAS_URL') || DEFAULT_GAS_URL
   );
   const [isSavingGasUrl, setIsSavingGasUrl] = useState(false);
   const [isSendingToSheet, setIsSendingToSheet] = useState(false);
