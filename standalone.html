@@ -112,6 +112,9 @@
         try { return JSON.parse(localStorage.getItem('NUTRITION_ORDER_HISTORY') || '[]'); } catch { return []; }
       });
 
+      // 目立つ申請完了通知用State
+      const [submissionSuccessInfo, setSubmissionSuccessInfo] = useState(null);
+
       const [isSettingsAuth, setIsSettingsAuth] = useState(false);
       const [settingsPasswordInput, setSettingsPasswordInput] = useState('');
       const [settingsAuthError, setSettingsAuthError] = useState('');
@@ -209,7 +212,45 @@
         setSystemSettings(p => ({ ...p, vendors: [...p.vendors, { id: Date.now(), ...newVendor }] }));
         setNewVendor({ name: '', fax: '', contact: '' }); showToast('新しい発注先業者を追加しました！');
       };
-      const handleDeleteVendor = (id) => { setSystemSettings(p => ({ ...p, vendors: p.vendors.filter(v => v.id !== id) })); showToast('業者を削除しました。'); };
+      // ===== 管理栄養士による申請編集ヘルパー =====
+      const updateUnitQtyByNutritionist = (unitKey, productId, field, delta) => {
+        setUnitData(prev => {
+          const unitInfo = prev[unitKey] || { cart: {}, memo: '', staffName: '' };
+          const currentItem = unitInfo.cart[productId] || { facilityQty: 0, personalQty: 0, personalNames: '' };
+          const nextQty = Math.max(0, currentItem[field] + delta);
+          const updatedItem = { ...currentItem, [field]: nextQty };
+          const newCart = { ...unitInfo.cart };
+          if (updatedItem.facilityQty === 0 && updatedItem.personalQty === 0) { delete newCart[productId]; }
+          else { newCart[productId] = updatedItem; }
+          return { ...prev, [unitKey]: { ...unitInfo, cart: newCart } };
+        });
+        showToast('管理栄養士：申請数量を変更しました。');
+      };
+
+      const deleteUnitItemByNutritionist = (unitKey, productId) => {
+        setUnitData(prev => {
+          const unitInfo = prev[unitKey] || { cart: {}, memo: '', staffName: '' };
+          const newCart = { ...unitInfo.cart };
+          delete newCart[productId];
+          return { ...prev, [unitKey]: { ...unitInfo, cart: newCart } };
+        });
+        showToast('管理栄養士：商品を申請リストから削除しました。');
+      };
+
+      const updateHistoryItemQty = (entryId, itemIdx, field, delta) => {
+        const updatedHistory = orderHistory.map(entry => {
+          if (entry.id !== entryId) return entry;
+          const updatedItems = entry.items.map((it, idx) => {
+            if (idx !== itemIdx) return it;
+            const nextQty = Math.max(0, it[field] + delta);
+            return { ...it, [field]: nextQty };
+          }).filter(it => (it.facilityQty + it.personalQty) > 0);
+          return { ...entry, items: updatedItems };
+        });
+        setOrderHistory(updatedHistory);
+        try { localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(updatedHistory)); } catch {}
+        showToast('管理栄養士：発注履歴の数量を更新しました。');
+      };
       const toggleProductPermission = (productId, field) => {
         setSystemSettings(p => ({ ...p, products: p.products.map(pr => pr.id === productId ? { ...pr, [field]: !pr[field] } : pr) }));
         showToast('購入区分の設定を更新しました。');
@@ -237,20 +278,45 @@
         const memo = unitData[currentUnit]?.memo || '';
         if (!staffName.trim()) { showToast('⚠️ 発注担当者名を入力してください。'); return; }
         const now = getNowJST();
+
+        // 申し送りメモはスプレッドシートで見やすいよう1行目のみに記載
         const flatItems = [];
+        let isFirstRow = true;
         items.forEach(([pId, item]) => {
           const p = systemSettings.products.find(pr => pr.id === parseInt(pId));
           if (!p) return;
-          if (item.facilityQty > 0) flatItems.push({ time: now, unit: currentUnit, staffName, productName: p.name, productUnit: p.unit, facilityQty: item.facilityQty, personalQty: 0, note: currentUnit, memo });
-          if (item.personalQty > 0) flatItems.push({ time: now, unit: currentUnit, staffName, productName: p.name, productUnit: p.unit, facilityQty: 0, personalQty: item.personalQty, note: `${currentUnit} (${item.personalNames || '個人購入'})`, memo });
+          if (item.facilityQty > 0) {
+            flatItems.push({
+              time: now, unit: currentUnit, staffName, productName: p.name, productUnit: p.unit,
+              facilityQty: item.facilityQty, personalQty: 0, note: currentUnit,
+              memo: isFirstRow ? memo : ''
+            });
+            isFirstRow = false;
+          }
+          if (item.personalQty > 0) {
+            flatItems.push({
+              time: now, unit: currentUnit, staffName, productName: p.name, productUnit: p.unit,
+              facilityQty: 0, personalQty: item.personalQty,
+              note: `${currentUnit} (${item.personalNames || '個人購入'})`,
+              memo: isFirstRow ? memo : ''
+            });
+            isFirstRow = false;
+          }
         });
+
         const newEntry = { id: Date.now(), submittedAt: now, unit: currentUnit, staffName, memo, items: flatItems, status: '申請中' };
         const updated = [newEntry, ...orderHistory];
         setOrderHistory(updated);
         try { localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(updated)); } catch {}
+
         await sendToGAS(flatItems);
+
+        // カートクリア
         setUnitData(prev => ({ ...prev, [currentUnit]: { cart: {}, memo: '', staffName: '', submittedAt: '' } }));
-        showToast(`✅ ${currentUnit}ユニットの発注（${flatItems.length}件）を送信しました！`);
+
+        // 目立つ全画面完了バナーを表示
+        setSubmissionSuccessInfo({ unit: currentUnit, count: flatItems.length, staff: staffName });
+        setTimeout(() => setSubmissionSuccessInfo(null), 5000);
       };
 
       const handleClearHistory = () => {
@@ -312,17 +378,26 @@
       // ===== スプレッドシートビュー用データ =====
       const allFlatSheetRows = [];
       Object.entries(unitData).forEach(([uKey, uVal]) => {
+        let isFirst = true;
         Object.entries(uVal.cart || {}).forEach(([pId, item]) => {
           const p = systemSettings.products.find(pr => pr.id === parseInt(pId));
           if (p) {
-            if (item.facilityQty > 0) allFlatSheetRows.push({ time: uVal.submittedAt || '(未送信)', unit: uKey, staff: uVal.staffName, productName: p.name, facilityQty: `${item.facilityQty} ${p.unit}`, personalQty: '0', note: uKey, memo: uVal.memo });
-            if (item.personalQty > 0) allFlatSheetRows.push({ time: uVal.submittedAt || '(未送信)', unit: uKey, staff: uVal.staffName, productName: p.name, facilityQty: '0', personalQty: `${item.personalQty} ${p.unit}`, note: `${uKey} (${item.personalNames || '個人購入'})`, memo: uVal.memo });
+            if (item.facilityQty > 0) {
+              allFlatSheetRows.push({ time: uVal.submittedAt || '(未送信)', unit: uKey, staff: uVal.staffName, productName: p.name, facilityQty: `${item.facilityQty} ${p.unit}`, personalQty: '0', note: uKey, memo: isFirst ? uVal.memo : '' });
+              isFirst = false;
+            }
+            if (item.personalQty > 0) {
+              allFlatSheetRows.push({ time: uVal.submittedAt || '(未送信)', unit: uKey, staff: uVal.staffName, productName: p.name, facilityQty: '0', personalQty: `${item.personalQty} ${p.unit}`, note: `${uKey} (${item.personalNames || '個人購入'})`, memo: isFirst ? uVal.memo : '' });
+              isFirst = false;
+            }
           }
         });
       });
       orderHistory.forEach(entry => {
+        let isFirst = true;
         (entry.items || []).forEach(item => {
-          allFlatSheetRows.push({ time: item.time, unit: item.unit, staff: item.staffName, productName: item.productName, facilityQty: item.facilityQty > 0 ? `${item.facilityQty} ${item.productUnit || ''}` : '0', personalQty: item.personalQty > 0 ? `${item.personalQty} ${item.productUnit || ''}` : '0', note: item.note, memo: item.memo });
+          allFlatSheetRows.push({ time: item.time, unit: item.unit, staff: item.staffName, productName: item.productName, facilityQty: item.facilityQty > 0 ? `${item.facilityQty} ${item.productUnit || ''}` : '0', personalQty: item.personalQty > 0 ? `${item.personalQty} ${item.productUnit || ''}` : '0', note: item.note, memo: isFirst ? item.memo : '' });
+          isFirst = false;
         });
       });
 
@@ -338,9 +413,28 @@
         <div className="min-h-screen bg-slate-100 flex flex-col">
           {/* Toast */}
           {toastMessage && (
-            <div className="fixed top-5 right-5 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-slate-700 no-print" style={{zIndex:9999}}>
+            <div className="fixed top-5 right-5 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-slate-700 no-print" style={{zIndex:9999}}>
               <span className="text-amber-400">✨</span>
               <span className="text-sm font-medium">{toastMessage}</span>
+            </div>
+          )}
+
+          {/* ===== 注文送信完了の特大目立つ通知モーダル ===== */}
+          {submissionSuccessInfo && (
+            <div className="fixed inset-0 flex items-center justify-center p-4 bg-slate-900 bg-opacity-70 no-print animate-bounce" style={{zIndex:10000,backdropFilter:'blur(4px)'}}>
+              <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-8 rounded-3xl shadow-2xl max-w-lg w-full text-center space-y-4 border-2 border-emerald-300">
+                <div className="text-6xl">🎉</div>
+                <h2 className="text-2xl font-black">【{submissionSuccessInfo.unit}】の発注申請を送信しました！</h2>
+                <div className="bg-white/20 p-4 rounded-2xl text-sm font-bold space-y-1">
+                  <p>発注担当者: {submissionSuccessInfo.staff} 様</p>
+                  <p>送信品目数: 全 {submissionSuccessInfo.count} 件</p>
+                  <p className="text-xs text-emerald-100 mt-1">※スプレッドシートへの記録・履歴保存が完了しました</p>
+                </div>
+                <button onClick={() => setSubmissionSuccessInfo(null)}
+                  className="px-8 py-3 bg-white text-emerald-900 font-bold text-sm rounded-xl shadow-lg hover:bg-slate-100 transition-all">
+                  閉じる
+                </button>
+              </div>
             </div>
           )}
 
@@ -491,7 +585,7 @@
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
                       <h2 className="text-base font-bold text-slate-800">👩‍⚕️ 管理栄養士 ダッシュボード・承認 &amp; PDF出力</h2>
-                      <p className="text-xs text-slate-500 mt-0.5">全ユニットから届いた申請明細です。</p>
+                      <p className="text-xs text-slate-500 mt-0.5">全ユニットから届いた申請明細です。各商品の数量変更や削除・申送り確認ができます。</p>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-2">
@@ -511,23 +605,46 @@
                 </div>
 
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
-                  <h3 className="text-sm font-bold text-slate-800">📅 本日届いている全ユニットからの申請一覧</h3>
-                  <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-slate-800">📅 本日届いている全ユニットからの申請一覧 (編集可能)</h3>
+                  <div className="space-y-6">
                     {Object.entries(unitData).map(([unitKey, uData]) => {
                       const cartItems = Object.entries(uData.cart || {}).filter(([_,item]) => (item.facilityQty + item.personalQty) > 0);
                       if (cartItems.length === 0) return null;
                       return (
-                        <div key={unitKey} className="border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-3">
-                          <div className="flex items-center justify-between border-b pb-2">
+                        <div key={unitKey} className="border-2 border-slate-300 rounded-2xl p-5 bg-slate-50 space-y-4 shadow-sm">
+                          <div className="flex items-center justify-between border-b pb-3">
                             <div className="flex items-center gap-3">
-                              <span className="px-3 py-1 bg-slate-900 text-white font-bold text-xs rounded-xl">{unitKey} ユニット</span>
-                              <span className="text-xs font-bold text-sky-900 bg-sky-100 px-2.5 py-0.5 rounded-lg">発注担当: {uData.staffName || '(未入力)'}</span>
+                              <span className="px-4 py-1.5 bg-slate-900 text-white font-bold text-sm rounded-xl">{unitKey} ユニット</span>
+                              <span className="text-xs font-bold text-sky-900 bg-sky-100 px-3 py-1 rounded-lg">発注担当: {uData.staffName || '(未入力)'}</span>
                             </div>
-                            <span className="text-xs font-bold text-slate-500">ステータス: 未送信（カート内）</span>
+                            <span className="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-300">カート未送信明細</span>
                           </div>
+
+                          {/* 特大・高視認性 申し送りメモ表示カード */}
+                          <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-2xl border-2 border-amber-300 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-amber-900 flex items-center gap-1">
+                                <span className="text-lg">📝</span> <span>【{unitKey} ユニットからの申送りメモ】</span>
+                              </span>
+                            </div>
+                            <p className="text-sm font-bold text-slate-800 pl-6 leading-relaxed">
+                              {uData.memo || <span className="text-slate-400 font-normal">（申送りメモなし）</span>}
+                            </p>
+                          </div>
+
                           <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs bg-white rounded-xl border">
-                              <thead><tr className="bg-slate-100 font-bold text-slate-700 border-b"><th className="p-2.5">申請商品名</th><th className="p-2.5 text-center">施設分</th><th className="p-2.5 text-center">個人分</th><th className="p-2.5 text-center">合計</th><th className="p-2.5">個人購入名メモ</th><th className="p-2.5">振分先業者</th></tr></thead>
+                              <thead>
+                                <tr className="bg-slate-100 font-bold text-slate-700 border-b">
+                                  <th className="p-3">申請商品名</th>
+                                  <th className="p-3 text-center">施設分</th>
+                                  <th className="p-3 text-center">個人分</th>
+                                  <th className="p-3 text-center">合計</th>
+                                  <th className="p-3">個人購入名メモ</th>
+                                  <th className="p-3">振分先業者</th>
+                                  <th className="p-3 text-center">管理栄養士操作</th>
+                                </tr>
+                              </thead>
                               <tbody className="divide-y divide-slate-100">
                                 {cartItems.map(([prodId, item]) => {
                                   const p = systemSettings.products.find(pr => pr.id === parseInt(prodId));
@@ -535,41 +652,94 @@
                                   const v = systemSettings.vendors.find(ven => ven.id === p.vendorId);
                                   return (
                                     <tr key={prodId} className="hover:bg-slate-50">
-                                      <td className="p-2.5 font-bold text-slate-800">{p.name}</td>
-                                      <td className="p-2.5 text-center font-bold text-sky-700">{item.facilityQty > 0 ? `${item.facilityQty} ${p.unit}` : '-'}</td>
-                                      <td className="p-2.5 text-center font-bold text-amber-700">{item.personalQty > 0 ? `${item.personalQty} ${p.unit}` : '-'}</td>
-                                      <td className="p-2.5 text-center font-bold bg-slate-100">{item.facilityQty + item.personalQty} {p.unit}</td>
-                                      <td className="p-2.5">{item.personalNames ? <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border rounded font-bold text-xs">{item.personalNames}</span> : '-'}</td>
-                                      <td className="p-2.5 text-slate-600 font-medium">{v ? v.name : '-'}</td>
+                                      <td className="p-3 font-bold text-slate-800 text-sm">{p.name}</td>
+                                      <td className="p-3 text-center font-bold text-sky-700">
+                                        <div className="flex items-center justify-center gap-1">
+                                          <button onClick={() => updateUnitQtyByNutritionist(unitKey, parseInt(prodId), 'facilityQty', -1)} className="w-6 h-6 bg-slate-100 rounded font-bold border">-</button>
+                                          <span className="w-8 text-center">{item.facilityQty}</span>
+                                          <button onClick={() => updateUnitQtyByNutritionist(unitKey, parseInt(prodId), 'facilityQty', 1)} className="w-6 h-6 bg-sky-600 text-white rounded font-bold">+</button>
+                                        </div>
+                                      </td>
+                                      <td className="p-3 text-center font-bold text-amber-700">
+                                        <div className="flex items-center justify-center gap-1">
+                                          <button onClick={() => updateUnitQtyByNutritionist(unitKey, parseInt(prodId), 'personalQty', -1)} className="w-6 h-6 bg-slate-100 rounded font-bold border">-</button>
+                                          <span className="w-8 text-center">{item.personalQty}</span>
+                                          <button onClick={() => updateUnitQtyByNutritionist(unitKey, parseInt(prodId), 'personalQty', 1)} className="w-6 h-6 bg-amber-500 text-white rounded font-bold">+</button>
+                                        </div>
+                                      </td>
+                                      <td className="p-3 text-center font-bold bg-slate-100 text-sm">{item.facilityQty + item.personalQty} {p.unit}</td>
+                                      <td className="p-3">{item.personalNames ? <span className="px-2.5 py-1 bg-amber-100 text-amber-900 border rounded font-bold text-xs">{item.personalNames}</span> : '-'}</td>
+                                      <td className="p-3 text-slate-600 font-medium">{v ? v.name : '-'}</td>
+                                      <td className="p-3 text-center">
+                                        <button onClick={() => deleteUnitItemByNutritionist(unitKey, parseInt(prodId))} className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold border border-red-200">
+                                          🗑️ 削除
+                                        </button>
+                                      </td>
                                     </tr>
                                   );
                                 })}
                               </tbody>
                             </table>
                           </div>
-                          {uData.memo && <div className="text-xs text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200"><span className="font-bold">📝 申送りメモ: </span>{uData.memo}</div>}
                         </div>
                       );
                     })}
+
                     {orderHistory.filter(h => h.status === '申請中').map(entry => (
-                      <div key={entry.id} className="border border-emerald-300 rounded-2xl p-4 bg-emerald-50 space-y-3">
-                        <div className="flex items-center justify-between border-b pb-2">
+                      <div key={entry.id} className="border-2 border-emerald-300 rounded-2xl p-5 bg-emerald-50 space-y-4 shadow-sm">
+                        <div className="flex items-center justify-between border-b pb-3">
                           <div className="flex items-center gap-3">
-                            <span className="px-3 py-1 bg-emerald-800 text-white font-bold text-xs rounded-xl">{entry.unit} ユニット</span>
-                            <span className="text-xs font-bold text-sky-900 bg-sky-100 px-2.5 py-0.5 rounded-lg">発注担当: {entry.staffName}</span>
+                            <span className="px-4 py-1.5 bg-emerald-800 text-white font-bold text-sm rounded-xl">{entry.unit} ユニット</span>
+                            <span className="text-xs font-bold text-sky-900 bg-sky-100 px-3 py-1 rounded-lg">発注担当: {entry.staffName}</span>
                           </div>
-                          <span className="text-xs font-bold text-emerald-700">送信済み: {entry.submittedAt}</span>
+                          <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300">送信済み ({entry.submittedAt})</span>
                         </div>
+
+                        {/* 特大 申し送りメモ表示カード */}
+                        <div className="bg-white p-4 rounded-2xl border-2 border-emerald-300 space-y-1">
+                          <span className="text-xs font-bold text-emerald-900 flex items-center gap-1">
+                            <span className="text-lg">📝</span> <span>【{entry.unit} ユニットからの申送りメモ】</span>
+                          </span>
+                          <p className="text-sm font-bold text-slate-800 pl-6 leading-relaxed">
+                            {entry.memo || <span className="text-slate-400 font-normal">（申送りメモなし）</span>}
+                          </p>
+                        </div>
+
                         <div className="overflow-x-auto">
                           <table className="w-full text-left text-xs bg-white rounded-xl border">
-                            <thead><tr className="bg-slate-100 font-bold text-slate-700 border-b"><th className="p-2.5">商品名</th><th className="p-2.5 text-center">施設分</th><th className="p-2.5 text-center">個人分</th><th className="p-2.5">備考</th></tr></thead>
+                            <thead>
+                              <tr className="bg-slate-100 font-bold text-slate-700 border-b">
+                                <th className="p-3">商品名</th>
+                                <th className="p-3 text-center">施設分数量</th>
+                                <th className="p-3 text-center">個人分数量</th>
+                                <th className="p-3">備考</th>
+                                <th className="p-3 text-center">管理栄養士操作</th>
+                              </tr>
+                            </thead>
                             <tbody className="divide-y divide-slate-100">
                               {(entry.items || []).map((item, idx) => (
                                 <tr key={idx} className="hover:bg-slate-50">
-                                  <td className="p-2.5 font-bold text-slate-800">{item.productName}</td>
-                                  <td className="p-2.5 text-center font-bold text-sky-700">{item.facilityQty > 0 ? item.facilityQty : '-'}</td>
-                                  <td className="p-2.5 text-center font-bold text-amber-700">{item.personalQty > 0 ? item.personalQty : '-'}</td>
-                                  <td className="p-2.5 text-slate-600">{item.note}</td>
+                                  <td className="p-3 font-bold text-slate-800 text-sm">{item.productName}</td>
+                                  <td className="p-3 text-center font-bold text-sky-700">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={() => updateHistoryItemQty(entry.id, idx, 'facilityQty', -1)} className="w-6 h-6 bg-slate-100 rounded font-bold border">-</button>
+                                      <span className="w-8 text-center">{item.facilityQty}</span>
+                                      <button onClick={() => updateHistoryItemQty(entry.id, idx, 'facilityQty', 1)} className="w-6 h-6 bg-sky-600 text-white rounded font-bold">+</button>
+                                    </div>
+                                  </td>
+                                  <td className="p-3 text-center font-bold text-amber-700">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={() => updateHistoryItemQty(entry.id, idx, 'personalQty', -1)} className="w-6 h-6 bg-slate-100 rounded font-bold border">-</button>
+                                      <span className="w-8 text-center">{item.personalQty}</span>
+                                      <button onClick={() => updateHistoryItemQty(entry.id, idx, 'personalQty', 1)} className="w-6 h-6 bg-amber-500 text-white rounded font-bold">+</button>
+                                    </div>
+                                  </td>
+                                  <td className="p-3 text-slate-600">{item.note}</td>
+                                  <td className="p-3 text-center">
+                                    <button onClick={() => updateHistoryItemQty(entry.id, idx, 'facilityQty', -item.facilityQty)} className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold border border-red-200">
+                                      🗑️ 削除
+                                    </button>
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
