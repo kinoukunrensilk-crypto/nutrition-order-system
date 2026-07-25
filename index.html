@@ -112,6 +112,10 @@
         try { return JSON.parse(localStorage.getItem('NUTRITION_ORDER_HISTORY') || '[]'); } catch { return []; }
       });
 
+      // 履歴検索・フィルター用State
+      const [historyUnitFilter, setHistoryUnitFilter] = useState('ALL');
+      const [historySearchKeyword, setHistorySearchKeyword] = useState('');
+
       // 目立つ申請完了通知用State
       const [submissionSuccessInfo, setSubmissionSuccessInfo] = useState(null);
 
@@ -176,14 +180,19 @@
         }
       };
 
-      // ===== カート操作 =====
+      // ===== カート操作 (お米5kg単位増減 & 誤入力防止ガード) =====
       const currentUnitState = unitData[currentUnit] || { cart: {}, memo: '', staffName: '', submittedAt: '' };
 
       const updateItemQty = (productId, field, delta) => {
+        const product = systemSettings.products.find(pr => pr.id === productId);
+        // お米(kg)の場合は5kg単位
+        const isRiceOrKg = product && (product.unit === 'kg' || product.name.includes('米') || product.name.includes('こめ'));
+        const step = isRiceOrKg ? (delta > 0 ? 5 : -5) : delta;
+
         setUnitData(prev => {
           const unitInfo = prev[currentUnit] || { cart: {}, memo: '', staffName: '' };
           const currentItem = unitInfo.cart[productId] || { facilityQty: 0, personalQty: 0, personalNames: '' };
-          const nextQty = Math.max(0, currentItem[field] + delta);
+          const nextQty = Math.max(0, currentItem[field] + step);
           const updatedItem = { ...currentItem, [field]: nextQty };
           const newCart = { ...unitInfo.cart };
           if (updatedItem.facilityQty === 0 && updatedItem.personalQty === 0) { delete newCart[productId]; }
@@ -191,6 +200,33 @@
           return { ...prev, [currentUnit]: { ...unitInfo, cart: newCart } };
         });
       };
+
+      // 前回の発注内容を呼び出す (コピー機能)
+      const copyLastOrderForUnit = () => {
+        const lastEntry = orderHistory.find(h => h.unit === currentUnit);
+        if (!lastEntry || !lastEntry.items || lastEntry.items.length === 0) {
+          showToast(`⚠️ ${currentUnit}ユニットの過去の発注履歴が見つかりません。`);
+          return;
+        }
+        setUnitData(prev => {
+          const unitInfo = prev[currentUnit] || { cart: {}, memo: '', staffName: '' };
+          const newCart = { ...unitInfo.cart };
+          lastEntry.items.forEach(it => {
+            const p = systemSettings.products.find(pr => pr.name === it.productName);
+            if (p) {
+              const existing = newCart[p.id] || { facilityQty: 0, personalQty: 0, personalNames: '' };
+              newCart[p.id] = {
+                facilityQty: existing.facilityQty + (it.facilityQty || 0),
+                personalQty: existing.personalQty + (it.personalQty || 0),
+                personalNames: existing.personalNames || (it.note?.includes('(') ? it.note.split('(')[1]?.replace(')','') : '')
+              };
+            }
+          });
+          return { ...prev, [currentUnit]: { ...unitInfo, cart: newCart, staffName: unitInfo.staffName || lastEntry.staffName || '' } };
+        });
+        showToast(`📋 ${currentUnit}ユニットの前回の発注内容を呼び出しました！`);
+      };
+
       const updatePersonalNames = (productId, text) => {
         setUnitData(prev => {
           const unitInfo = prev[currentUnit] || { cart: {}, memo: '', staffName: '' };
@@ -383,6 +419,53 @@
         setTimeout(() => setSubmissionSuccessInfo(null), 5000);
       };
 
+      // 締切時刻（14:00）超過チェック
+      const isAfterDeadline = () => {
+        const now = new Date();
+        const currentHM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        return currentHM > (systemSettings.deadlineTime || '14:00');
+      };
+
+      // CSVエクスポート (Excel対応 BOM付きUTF-8)
+      const exportHistoryToCSV = () => {
+        if (orderHistory.length === 0) {
+          showToast('⚠️ 発注履歴がありません。');
+          return;
+        }
+
+        const headers = ['送信日時', 'ステータス', 'ユニット名', '発注担当者', '商品名', '施設分数量', '個人分数量', 'FAX印字備考', '申送りメモ'];
+        const rows = [headers];
+
+        orderHistory.forEach(entry => {
+          (entry.items || []).forEach(item => {
+            rows.push([
+              `"${item.time || entry.submittedAt}"`,
+              `"${entry.status || '承認済'}"`,
+              `"${entry.unit}"`,
+              `"${entry.staffName || ''}"`,
+              `"${item.productName || ''}"`,
+              item.facilityQty || 0,
+              item.personalQty || 0,
+              `"${item.note || ''}"`,
+              `"${item.memo || ''}"`
+            ]);
+          });
+        });
+
+        const csvContent = '\uFEFF' + rows.map(r => r.join(',')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `栄養管理発注履歴_${new Date().toISOString().slice(0,10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast('📥 発注履歴のCSVファイルをダウンロードしました！');
+      };
+
       const handleClearHistory = () => {
         if (confirm('発注履歴をすべてクリアしますか？この操作は元に戻せません。')) {
           setOrderHistory([]); try { localStorage.removeItem('NUTRITION_ORDER_HISTORY'); } catch {}
@@ -530,6 +613,19 @@
             {/* ===== ユニット発注 ===== */}
             {role === 'staff' && (
               <div className="space-y-6">
+                {/* 締切時刻オーバー警告バナー */}
+                {isAfterDeadline() && (
+                  <div className="bg-amber-500 text-white rounded-2xl p-4 shadow-md flex items-center justify-between gap-3 border-2 border-amber-300">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">⏰</span>
+                      <div>
+                        <h3 className="text-sm font-bold">【締切時刻オーバー注意】本日の受付締切 ({systemSettings.deadlineTime || '14:00'}) を過ぎています</h3>
+                        <p className="text-xs text-amber-100 mt-0.5">今送信される発注は管理栄養士の取りまとめ完了後となるため、次回発送分（翌営業日扱い）となります。</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-bold text-slate-700">🏢 発注入力中ユニット:</span>
@@ -540,7 +636,13 @@
                       ))}
                     </div>
                   </div>
-                  <span className="text-sm font-bold text-amber-800 bg-amber-50 px-4 py-1.5 rounded-full border border-amber-200">【{currentUnit}】専用発注画面</span>
+                  <div className="flex items-center gap-3">
+                    <button onClick={copyLastOrderForUnit}
+                      className="px-3.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold text-xs rounded-xl flex items-center gap-1 transition-all">
+                      📋 前回の発注を呼び出す
+                    </button>
+                    <span className="text-sm font-bold text-amber-800 bg-amber-50 px-4 py-1.5 rounded-full border border-amber-200">【{currentUnit}】専用発注画面</span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -550,32 +652,42 @@
                     {systemSettings.products.map(product => {
                       const item = (currentUnitState.cart || {})[product.id] || { facilityQty: 0, personalQty: 0, personalNames: '' };
                       const totalQty = item.facilityQty + item.personalQty;
+                      const isRiceOrKg = product.unit === 'kg' || product.name.includes('米') || product.name.includes('こめ');
+                      const stepText = isRiceOrKg ? '5kg' : '1';
+                      const isLargeQty = totalQty >= 15;
+
                       return (
-                        <div key={product.id} className={`bg-white rounded-2xl p-5 border transition-all ${totalQty > 0 ? 'border-sky-500 shadow-md' : 'border-slate-200'}`}>
+                        <div key={product.id} className={`bg-white rounded-2xl p-5 border transition-all ${totalQty > 0 ? (isLargeQty ? 'border-amber-500 shadow-lg ring-2 ring-amber-400' : 'border-sky-500 shadow-md') : 'border-slate-200'}`}>
                           <div className="flex items-start justify-between">
                             <div>
-                              <h3 className="text-base font-bold text-slate-800">{product.name}</h3>
+                              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                <span>{product.name}</span>
+                                {isRiceOrKg && <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded border border-emerald-300 font-bold">5kg単位</span>}
+                              </h3>
                               <p className="text-xs text-slate-500 mt-1">発注先: {systemSettings.vendors.find(v => v.id === product.vendorId)?.name || '未設定'}</p>
                             </div>
-                            {totalQty > 0 && <span className="px-3.5 py-1 text-xs font-bold bg-sky-600 text-white rounded-full">合計 {totalQty} {product.unit}</span>}
+                            <div className="flex items-center gap-2">
+                              {isLargeQty && <span className="px-2.5 py-1 text-xs font-bold bg-amber-500 text-white rounded-full">⚠️ 大量発注注意</span>}
+                              {totalQty > 0 && <span className="px-3.5 py-1 text-xs font-bold bg-sky-600 text-white rounded-full">合計 {totalQty} {product.unit}</span>}
+                            </div>
                           </div>
                           <div className="mt-4 pt-3 border-t grid grid-cols-2 gap-4">
                             {product.allowFacility ? (
                               <div className="bg-sky-50 rounded-xl p-3 border flex justify-between items-center">
-                                <span className="text-xs font-bold text-sky-900">施設分</span>
+                                <span className="text-xs font-bold text-sky-900">施設分 ({stepText}単位)</span>
                                 <div className="flex items-center gap-2">
                                   <button onClick={() => updateItemQty(product.id, 'facilityQty', -1)} className="w-8 h-8 bg-white rounded border font-bold text-slate-700 hover:bg-slate-100 text-sm">-</button>
-                                  <span className="w-8 text-center text-sm font-bold">{item.facilityQty}</span>
+                                  <span className="w-10 text-center text-sm font-bold">{item.facilityQty}</span>
                                   <button onClick={() => updateItemQty(product.id, 'facilityQty', 1)} className="w-8 h-8 bg-sky-600 text-white rounded font-bold hover:bg-sky-700 text-sm">+</button>
                                 </div>
                               </div>
                             ) : <div className="bg-slate-50 p-3 rounded text-center text-xs text-slate-400 font-bold">施設分不可</div>}
                             {product.allowPersonal ? (
                               <div className="bg-amber-50 rounded-xl p-3 border flex justify-between items-center">
-                                <span className="text-xs font-bold text-amber-900">個人分</span>
+                                <span className="text-xs font-bold text-amber-900">個人分 ({stepText}単位)</span>
                                 <div className="flex items-center gap-2">
                                   <button onClick={() => updateItemQty(product.id, 'personalQty', -1)} className="w-8 h-8 bg-white rounded border font-bold text-slate-700 hover:bg-slate-100 text-sm">-</button>
-                                  <span className="w-8 text-center text-sm font-bold">{item.personalQty}</span>
+                                  <span className="w-10 text-center text-sm font-bold">{item.personalQty}</span>
                                   <button onClick={() => updateItemQty(product.id, 'personalQty', 1)} className="w-8 h-8 bg-amber-500 text-white rounded font-bold hover:bg-amber-600 text-sm">+</button>
                                 </div>
                               </div>
@@ -831,16 +943,39 @@
                 <div className="text-white rounded-3xl p-6 shadow-xl flex flex-wrap items-center justify-between gap-4" style={{background:'linear-gradient(135deg,#4f46e5,#7e22ce)'}}>
                   <div className="space-y-1">
                     <h2 className="text-lg font-bold">📋 発注履歴（全{orderHistory.length}件）</h2>
-                    <p className="text-xs opacity-80">送信済みの発注がすべて時系列で表示されます。ブラウザを閉じても保存されます。</p>
+                    <p className="text-xs opacity-80">送信済みの発注がすべて時系列で保存されます。</p>
                   </div>
-                  {orderHistory.length > 0 && (
-                    <button onClick={handleClearHistory}
-                      className="px-5 py-2.5 text-white font-bold text-xs rounded-xl flex items-center gap-2 transition-all hover:opacity-80"
-                      style={{background:'rgba(255,255,255,0.2)'}}>
-                      🗑️ 履歴をクリア
+                  <div className="flex items-center gap-3">
+                    <button onClick={exportHistoryToCSV}
+                      className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow flex items-center gap-2 transition-all">
+                      📥 CSVダウンロード (Excel用)
                     </button>
-                  )}
+                    {orderHistory.length > 0 && (
+                      <button onClick={handleClearHistory}
+                        className="px-4 py-2.5 text-white font-bold text-xs rounded-xl flex items-center gap-1 transition-all hover:opacity-80"
+                        style={{background:'rgba(255,255,255,0.2)'}}>
+                        🗑️ 履歴クリア
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {/* フィルター・検索バー */}
+                <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs font-bold text-slate-700">ユニット絞り込み:</label>
+                    <select value={historyUnitFilter} onChange={e => setHistoryUnitFilter(e.target.value)}
+                      className="p-2 text-xs rounded-xl border border-slate-300 font-bold bg-white focus:outline-none">
+                      <option value="ALL">全ユニット</option>
+                      {systemSettings.units.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2 flex-1" style={{maxWidth:300}}>
+                    <input type="text" value={historySearchKeyword} onChange={e => setHistorySearchKeyword(e.target.value)}
+                      placeholder="商品名・担当者名・メモで検索..." className="w-full p-2 text-xs rounded-xl border border-slate-300 focus:outline-none" />
+                  </div>
+                </div>
+
                 {orderHistory.length === 0 ? (
                   <div className="bg-white rounded-2xl p-12 shadow-sm border text-center space-y-4">
                     <div className="text-6xl">📋</div>
@@ -849,7 +984,17 @@
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {orderHistory.map(entry => (
+                    {orderHistory
+                      .filter(entry => historyUnitFilter === 'ALL' || entry.unit === historyUnitFilter)
+                      .filter(entry => {
+                        if (!historySearchKeyword.trim()) return true;
+                        const kw = historySearchKeyword.toLowerCase();
+                        const matchStaff = (entry.staffName || '').toLowerCase().includes(kw);
+                        const matchMemo = (entry.memo || '').toLowerCase().includes(kw);
+                        const matchItem = (entry.items || []).some(it => (it.productName || '').toLowerCase().includes(kw) || (it.note || '').toLowerCase().includes(kw));
+                        return matchStaff || matchMemo || matchItem;
+                      })
+                      .map(entry => (
                       <div key={entry.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                         <button onClick={() => setExpandedHistoryId(expandedHistoryId === entry.id ? null : entry.id)}
                           className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-all text-left">
