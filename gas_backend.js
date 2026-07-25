@@ -1,13 +1,8 @@
 /**
- * 栄養管理物品発注システム - Google Apps Script (GAS) バックエンド処理
- * 
- * 【ワンタップで20件のサンプルデータをスプレッドシートに今すぐ反映させる方法】
- * 1. Apps Script エディタの上部にある関数選択ドロップダウンで「insertSampleData20」を選択します。
- * 2. 「実行」ボタンを押します。
- * 3. スプレッドシートの2行目〜21行目に一瞬で20件のデータが書き込まれます！
+ * 栄養管理物品発注システム - Google Apps Script (GAS) バックエンド処理（ハイブリッド完全版）
  */
 
-// スプレッドシート初期化＆20件サンプルデータ一括自動書き込み関数
+// スプレッドシート初期化＆20件サンプルデータ一括自動書き込み関数（GASエディタから▶実行可能）
 function insertSampleData20() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('発注データ');
@@ -51,71 +46,92 @@ function insertSampleData20() {
   return 'スプレッドシートへ20件のサンプルデータを一括入力完了しました！';
 }
 
-// GETリクエスト（データ確認API）
+// GETリクエスト（Webブラウザ/JSONPからの確実データ書き込みAPI）
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({ status: "ok", message: "GAS Web API 正常動作中" }))
-    .setMimeType(ContentService.MimeType.JSON);
+  try {
+    if (e && e.parameter && e.parameter.payload) {
+      const data = JSON.parse(e.parameter.payload);
+      return processData(data);
+    }
+    return responseJSON({ status: "ok", message: "GAS Web API 正常動作中" });
+  } catch (err) {
+    return responseJSON({ success: false, error: err.toString() });
+  }
 }
 
 // POSTリクエスト（アプリからの自動同期API）
 function doPost(e) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = ss.getSheetByName('発注データ');
-    if (!sheet) {
-      sheet = ss.insertSheet('発注データ');
-      sheet.appendRow(['入力日時', 'ユニット名', '発注担当者', '商品名', '施設分数量', '個人分数量', 'FAX印字備考', '申送りメモ', 'ステータス']);
-    }
-
     let data;
-    try {
-      data = JSON.parse(e.postData.contents);
-    } catch(err) {
-      data = JSON.parse(e.parameter.data || '{}');
+    if (e && e.postData && e.postData.contents) {
+      try {
+        data = JSON.parse(e.postData.contents);
+      } catch(err) {
+        data = JSON.parse(e.parameter.payload || e.parameter.data || '{}');
+      }
+    } else if (e && e.parameter && e.parameter.payload) {
+      data = JSON.parse(e.parameter.payload);
     }
-
-    const nowStr = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
-
-    // bulkSubmit (一括送信)
-    if (data.action === 'bulkSubmit' && data.items) {
-      data.items.forEach(item => {
-        sheet.appendRow([
-          item.time || nowStr,
-          item.unit || '',
-          item.staffName || '',
-          item.productName || '',
-          item.facilityQty || 0,
-          item.personalQty || 0,
-          item.note || '',
-          item.memo || '',
-          '申請中'
-        ]);
-      });
-      return responseJSON({ success: true, message: `${data.items.length}件をスプレッドシートへ追加しました！` });
-    }
-
-    // submitOrder (単発送信)
-    if (data.action === 'submitOrder' && data.cart) {
-      Object.entries(data.cart).forEach(([prodId, item]) => {
-        sheet.appendRow([
-          nowStr,
-          data.unit || '',
-          data.staffName || '',
-          item.productName || prodId,
-          item.facilityQty || 0,
-          item.personalQty || 0,
-          item.personalNames ? `${data.unit} (${item.personalNames})` : data.unit,
-          data.memo || '',
-          '申請中'
-        ]);
-      });
-      return responseJSON({ success: true, message: 'スプレッドシートへ追加しました！' });
-    }
-
-    return responseJSON({ success: true, message: 'データを受信しました' });
+    return processData(data);
   } catch (err) {
     return responseJSON({ success: false, error: err.toString() });
   }
+}
+
+// データ処理共通ロジック
+function processData(data) {
+  if (!data) return responseJSON({ success: false, error: 'データが空です' });
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('発注データ');
+  if (!sheet) {
+    sheet = ss.insertSheet('発注データ');
+  }
+
+  // ヘッダー行が存在しない場合は作成
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['入力日時', 'ユニット名', '発注担当者', '商品名', '施設分数量', '個人分数量', 'FAX印字備考', '申送りメモ', 'ステータス']);
+  }
+
+  const nowStr = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
+
+  // bulkSubmit (一括送信)
+  if (data.action === 'bulkSubmit' && data.items) {
+    data.items.forEach(item => {
+      sheet.appendRow([
+        item.time || nowStr,
+        item.unit || '',
+        item.staffName || '',
+        item.productName || '',
+        item.facilityQty || 0,
+        item.personalQty || 0,
+        item.note || '',
+        item.memo || '',
+        '申請中'
+      ]);
+    });
+    return responseJSON({ success: true, message: `${data.items.length}件をスプレッドシートへ追加しました！` });
+  }
+
+  // submitOrder (単発送信)
+  if (data.action === 'submitOrder' && data.cart) {
+    Object.entries(data.cart).forEach(([prodId, item]) => {
+      sheet.appendRow([
+        nowStr,
+        data.unit || '',
+        data.staffName || '',
+        item.productName || prodId,
+        item.facilityQty || 0,
+        item.personalQty || 0,
+        item.personalNames ? `${data.unit} (${item.personalNames})` : data.unit,
+        data.memo || '',
+        '申請中'
+      ]);
+    });
+    return responseJSON({ success: true, message: 'スプレッドシートへ追加しました！' });
+  }
+
+  return responseJSON({ success: true, message: 'データを受信しました' });
 }
 
 function responseJSON(obj) {

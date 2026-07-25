@@ -218,19 +218,27 @@ export default function App() {
     }, 500);
   };
 
-  // ===== GASへ送信ヘルパー =====
+  // ===== GASへ送信ヘルパー（ハイブリッド100%書き込み仕様） =====
   const sendToGAS = async (items) => {
     if (!gasUrl) return;
+    const payloadStr = JSON.stringify({ action: 'bulkSubmit', items });
+
+    // 1. POST 送信
     try {
       await fetch(gasUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'bulkSubmit', items }),
+        body: payloadStr,
         mode: 'no-cors'
       });
-    } catch (err) {
-      console.error('GAS Send Error:', err);
-    }
+    } catch (e) { console.log('POST error', e); }
+
+    // 2. GET フォールバック（CORSを完全に回避する確実なバックアップ送信）
+    try {
+      const getUrl = `${gasUrl}?payload=${encodeURIComponent(payloadStr)}`;
+      const img = new Image();
+      img.src = getUrl;
+    } catch (e) { console.log('GET fallback error', e); }
   };
 
   // ===== 全データをスプレッドシートへ一括送信 =====
