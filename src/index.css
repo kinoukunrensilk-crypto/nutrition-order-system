@@ -17,3 +17,39 @@ body {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
+
+/* ===== PDF / 印刷用スタイル ===== */
+@media print {
+  /* 印刷対象外の要素をすべて非表示 */
+  body * {
+    visibility: hidden;
+  }
+
+  /* FAX注文票エリアのみ表示 */
+  #fax-print-area,
+  #fax-print-area * {
+    visibility: visible;
+  }
+
+  #fax-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: 210mm;
+    padding: 12mm 15mm;
+    background: white;
+    font-size: 11pt;
+  }
+
+  /* 印刷時に不要なボタン・装飾を非表示 */
+  .no-print {
+    display: none !important;
+  }
+
+  /* 印刷時のページ設定 */
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+}
