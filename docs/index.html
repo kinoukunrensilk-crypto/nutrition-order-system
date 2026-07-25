@@ -285,6 +285,8 @@
         });
         setOrderHistory(updatedHistory);
         try { localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(updatedHistory)); } catch {}
+      };
+
       // ===== 管理栄養士による個別の承認・完了処理 =====
       const approveSingleOrder = (entryId) => {
         const updatedHistory = orderHistory.map(entry => entry.id === entryId ? { ...entry, status: '承認済' } : entry);
