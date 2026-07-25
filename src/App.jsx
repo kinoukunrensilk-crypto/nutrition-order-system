@@ -35,7 +35,9 @@ import {
   ChevronDown,
   ChevronUp,
   History,
-  Download
+  Download,
+  Lock,
+  KeyRound
 } from 'lucide-react';
 
 // ===== JST日時ヘルパー =====
@@ -195,11 +197,21 @@ export default function App() {
   });
   const [expandedHistoryId, setExpandedHistoryId] = useState(null);
 
-  const [showFaxModal, setShowFaxModal] = useState(false);
-  const [selectedFaxVendorId, setSelectedFaxVendorId] = useState(1);
-  const [faxStatus, setFaxStatus] = useState('preview');
-  const [toastMessage, setToastMessage] = useState(null);
-  const toastTimerRef = useRef(null);
+  // 設定画面のパスワード保護用state (暗証番号: eiyou0729)
+  const [isSettingsAuth, setIsSettingsAuth] = useState(false);
+  const [settingsPasswordInput, setSettingsPasswordInput] = useState('');
+  const [settingsAuthError, setSettingsAuthError] = useState('');
+
+  const handleSettingsAuthSubmit = (e) => {
+    if (e) e.preventDefault();
+    if (settingsPasswordInput === 'eiyou0729') {
+      setIsSettingsAuth(true);
+      setSettingsAuthError('');
+      showToast('🔓 設定画面のロックを解除しました');
+    } else {
+      setSettingsAuthError('パスワードが正しくありません');
+    }
+  };
 
   // ===== トースト通知（タイマー衝突修正済み）=====
   const showToast = (msg) => {
@@ -1021,11 +1033,51 @@ export default function App() {
 
         {/* ========== MODE: 設定画面 ステップ1〜4 ========== */}
         {role === 'settings' && (
-          <div className="max-w-5xl mx-auto space-y-6">
-            <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-3xl p-6 shadow-lg">
-              <h2 className="text-xl font-bold">⚙️ 管理栄養士・管理者用 設定画面</h2>
-              <p className="text-xs text-amber-100 mt-1">業者・商品・ユニット・曜日ルールの追加・編集・削除ができます。</p>
+          !isSettingsAuth ? (
+            <div className="max-w-md mx-auto my-12 bg-white rounded-3xl p-8 shadow-xl border border-slate-200 text-center space-y-6">
+              <div className="w-16 h-16 rounded-3xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200 shadow-inner">
+                <Lock className="w-8 h-8 text-amber-600" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-slate-800">⚙️ 設定画面の認証保護</h3>
+                <p className="text-xs text-slate-500">管理者・管理栄養士専用エリアです。パスワードを入力してください。</p>
+              </div>
+              <form onSubmit={handleSettingsAuthSubmit} className="space-y-4">
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-3 font-bold" />
+                  <input
+                    type="password"
+                    value={settingsPasswordInput}
+                    onChange={(e) => setSettingsPasswordInput(e.target.value)}
+                    placeholder="パスワードを入力 (例: eiyou0729)"
+                    className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                  />
+                </div>
+                {settingsAuthError && (
+                  <p className="text-xs font-bold text-red-500 bg-red-50 p-2 rounded-lg border border-red-200">{settingsAuthError}</p>
+                )}
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold text-xs rounded-xl shadow-lg transition-all"
+                >
+                  🔓 ロック解除
+                </button>
+              </form>
             </div>
+          ) : (
+            <div className="max-w-5xl mx-auto space-y-6">
+              <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-3xl p-6 shadow-lg flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold">⚙️ 管理栄養士・管理者用 設定画面</h2>
+                  <p className="text-xs text-amber-100 mt-1">業者・商品・ユニット・曜日ルールの追加・編集・削除ができます。</p>
+                </div>
+                <button
+                  onClick={() => setIsSettingsAuth(false)}
+                  className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-xl transition-all"
+                >
+                  🔒 ログアウト
+                </button>
+              </div>
 
             {/* ステップ切替ナビ */}
             <div className="flex items-center space-x-2 bg-white p-2 rounded-2xl shadow-sm border">
@@ -1195,7 +1247,8 @@ export default function App() {
               </div>
             )}
           </div>
-        )}
+        )
+      )}
       </main>
 
       {/* ========== FAX PDF出力モーダル ========== */}
