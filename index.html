@@ -729,7 +729,7 @@
                       <button onClick={() => { if(confirm('設定をすべて初期値にリセットしますか？この操作は元に戻せません。')) { try { localStorage.removeItem('NUTRITION_SYSTEM_SETTINGS'); } catch {} setSystemSettings(DEFAULT_SETTINGS); showToast('⚙️ 設定を初期値にリセットしました。'); } }}
                         className="px-3 py-2 text-white text-xs font-bold rounded-xl transition-all hover:opacity-80"
                         style={{background:'rgba(255,255,255,0.2)'}}>🔄 初期値にリセット</button>
-                      <button onClick={() => setIsSettingsAuth(false)}
+                      <button onClick={() => { setIsSettingsAuth(false); setSettingsPasswordInput(''); }}
                         className="px-4 py-2 text-white text-xs font-bold rounded-xl transition-all hover:opacity-80"
                         style={{background:'rgba(255,255,255,0.2)'}}>🔒 ログアウト</button>
                     </div>
