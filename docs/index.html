@@ -42,8 +42,9 @@
       timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
     });
     const getTodayJST = () => {
-      const m = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric' });
-      const d = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', day: 'numeric' });
+      const now = new Date();
+      const m = now.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric' }).replace('月', '');
+      const d = now.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', day: 'numeric' }).replace('日', '');
       return `${m}月${d}日`;
     };
 
@@ -868,12 +869,22 @@
                   <button onClick={() => setShowFaxModal(false)} className="p-1 hover:bg-slate-100 rounded-full text-slate-400 font-bold text-xl">✕</button>
                 </div>
 
-                <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl no-print">
-                  <span className="text-xs font-bold text-slate-600 px-2">送信先業者切替:</span>
-                  {systemSettings.vendors.map(v => (
-                    <button key={v.id} onClick={() => setSelectedFaxVendorId(v.id)}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${selectedFaxVendorId === v.id ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-200'}`}>{v.name}</button>
-                  ))}
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100 p-2 rounded-2xl no-print">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-600 px-1">送信先業者:</span>
+                    {systemSettings.vendors.map(v => (
+                      <button key={v.id} onClick={() => setSelectedFaxVendorId(v.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${selectedFaxVendorId === v.id ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-200'}`}>{v.name}</button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-bold text-slate-600">印字担当者:</label>
+                    <select value={selectedApprover} onChange={e => setSelectedApprover(e.target.value)}
+                      className="p-1.5 text-xs rounded-xl border border-slate-300 font-bold bg-white focus:outline-none">
+                      {systemSettings.nutritionists.map(n => <option key={n} value={n}>{n}</option>)}
+                      <option value="">(なし・印字しない)</option>
+                    </select>
+                  </div>
                 </div>
 
                 {faxStatus === 'preview' ? (
@@ -927,7 +938,9 @@
                         <div style={{paddingTop:'24px',textAlign:'right',lineHeight:'1.5',fontFamily:'sans-serif'}}>
                           <p style={{fontWeight:'bold',fontSize:'11px'}}>特別養護老人ホーム</p>
                           <p style={{fontWeight:'bold',fontSize:'13px'}}>　　　　　シルクロード七福神</p>
-                          <p style={{fontSize:'11px',fontWeight:'bold',color:'#065f46',paddingTop:'2px'}}>担当：{selectedApprover} (栄養士)</p>
+                          {selectedApprover ? (
+                            <p style={{fontSize:'11px',fontWeight:'bold',color:'#065f46',paddingTop:'2px'}}>担当：{selectedApprover} (栄養士)</p>
+                          ) : null}
                           <p style={{fontSize:'10px',color:'#475569'}}>〒890-0082 鹿児島県鹿児島市紫原5丁目13-18</p>
                           <p style={{fontSize:'10px',color:'#475569',fontFamily:'monospace'}}>TEL:099-256-2729 / FAX:099-256-3729</p>
                         </div>
