@@ -331,20 +331,20 @@
           )}
 
           {/* Header */}
-          <header className="bg-slate-900 text-white sticky top-0 shadow-lg no-print" style={{zIndex:40}}>
-            <div className="max-w-7xl mx-auto px-4 py-3">
+          <header className="bg-slate-900 text-white sticky top-0 shadow-lg no-print" style={{zIndex:60}}>
+            <div className="max-w-7xl mx-auto px-4 py-3.5">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md text-xl" style={{background:'linear-gradient(135deg,#10b981,#0d9488)'}}>📋</div>
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md text-2xl" style={{background:'linear-gradient(135deg,#10b981,#0d9488)'}}>📋</div>
                   <div>
-                    <h1 className="text-base font-bold leading-tight">栄養管理物品発注システム</h1>
-                    <p className="text-xs text-slate-400">特別養護老人ホーム シルクロード七福神</p>
+                    <h1 className="text-lg font-bold leading-tight">栄養管理物品発注システム</h1>
+                    <p className="text-sm text-slate-400">特別養護老人ホーム シルクロード七福神</p>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700">
+                <div className="flex flex-wrap items-center gap-1.5 bg-slate-800 p-1.5 rounded-xl border border-slate-700">
                   {navTabs.map(tab => (
-                    <button key={tab.key} onClick={() => setRole(tab.key)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${role === tab.key ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}>
+                    <button key={tab.key} onClick={() => { setShowFaxModal(false); setRole(tab.key); }}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${role === tab.key ? 'bg-emerald-600 text-white shadow' : 'text-slate-300 hover:text-white'}`}>
                       {tab.label}
                     </button>
                   ))}
@@ -359,43 +359,43 @@
             {/* ===== ユニット発注 ===== */}
             {role === 'staff' && (
               <div className="space-y-6">
-                <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-700">🏢 発注入力中ユニット:</span>
-                    <div className="flex flex-wrap gap-1.5">
+                    <span className="text-sm font-bold text-slate-700">🏢 発注入力中ユニット:</span>
+                    <div className="flex flex-wrap gap-2">
                       {systemSettings.units.map(u => (
                         <button key={u} onClick={() => setCurrentUnit(u)}
-                          className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${currentUnit === u ? 'bg-sky-600 text-white shadow' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{u}</button>
+                          className={`px-4 py-1.5 rounded-xl text-sm font-bold transition-all ${currentUnit === u ? 'bg-sky-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>{u}</button>
                       ))}
                     </div>
                   </div>
-                  <span className="text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">【{currentUnit}】専用発注画面</span>
+                  <span className="text-sm font-bold text-amber-800 bg-amber-50 px-4 py-1.5 rounded-full border border-amber-200">【{currentUnit}】専用発注画面</span>
                 </div>
 
-                <div className="grid grid-cols-1 gap-6" style={{gridTemplateColumns:'1fr auto'}}>
-                  {/* 商品リスト */}
-                  <div className="space-y-3" style={{minWidth:0}}>
-                    <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">[{currentUnit} ユニット] 発注商品リスト</h3>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* 商品リスト (左側: 7) */}
+                  <div className="lg:col-span-7 space-y-4" style={{minWidth:0}}>
+                    <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider">[{currentUnit} ユニット] 発注商品リスト</h3>
                     {systemSettings.products.map(product => {
                       const item = (currentUnitState.cart || {})[product.id] || { facilityQty: 0, personalQty: 0, personalNames: '' };
                       const totalQty = item.facilityQty + item.personalQty;
                       return (
-                        <div key={product.id} className={`bg-white rounded-2xl p-4 border transition-all ${totalQty > 0 ? 'border-sky-500 shadow-md' : 'border-slate-200'}`}>
+                        <div key={product.id} className={`bg-white rounded-2xl p-5 border transition-all ${totalQty > 0 ? 'border-sky-500 shadow-md' : 'border-slate-200'}`}>
                           <div className="flex items-start justify-between">
                             <div>
-                              <h3 className="text-sm font-bold text-slate-800">{product.name}</h3>
-                              <p className="text-xs text-slate-400 mt-0.5">発注先: {systemSettings.vendors.find(v => v.id === product.vendorId)?.name || '未設定'}</p>
+                              <h3 className="text-base font-bold text-slate-800">{product.name}</h3>
+                              <p className="text-xs text-slate-500 mt-1">発注先: {systemSettings.vendors.find(v => v.id === product.vendorId)?.name || '未設定'}</p>
                             </div>
-                            {totalQty > 0 && <span className="px-3 py-1 text-xs font-bold bg-sky-600 text-white rounded-full">合計 {totalQty} {product.unit}</span>}
+                            {totalQty > 0 && <span className="px-3.5 py-1 text-xs font-bold bg-sky-600 text-white rounded-full">合計 {totalQty} {product.unit}</span>}
                           </div>
                           <div className="mt-4 pt-3 border-t grid grid-cols-2 gap-4">
                             {product.allowFacility ? (
                               <div className="bg-sky-50 rounded-xl p-3 border flex justify-between items-center">
                                 <span className="text-xs font-bold text-sky-900">施設分</span>
                                 <div className="flex items-center gap-2">
-                                  <button onClick={() => updateItemQty(product.id, 'facilityQty', -1)} className="w-7 h-7 bg-white rounded border font-bold text-slate-700 hover:bg-slate-100">-</button>
-                                  <span className="w-8 text-center text-xs font-bold">{item.facilityQty}</span>
-                                  <button onClick={() => updateItemQty(product.id, 'facilityQty', 1)} className="w-7 h-7 bg-sky-600 text-white rounded font-bold hover:bg-sky-700">+</button>
+                                  <button onClick={() => updateItemQty(product.id, 'facilityQty', -1)} className="w-8 h-8 bg-white rounded border font-bold text-slate-700 hover:bg-slate-100 text-sm">-</button>
+                                  <span className="w-8 text-center text-sm font-bold">{item.facilityQty}</span>
+                                  <button onClick={() => updateItemQty(product.id, 'facilityQty', 1)} className="w-8 h-8 bg-sky-600 text-white rounded font-bold hover:bg-sky-700 text-sm">+</button>
                                 </div>
                               </div>
                             ) : <div className="bg-slate-50 p-3 rounded text-center text-xs text-slate-400 font-bold">施設分不可</div>}
@@ -403,9 +403,9 @@
                               <div className="bg-amber-50 rounded-xl p-3 border flex justify-between items-center">
                                 <span className="text-xs font-bold text-amber-900">個人分</span>
                                 <div className="flex items-center gap-2">
-                                  <button onClick={() => updateItemQty(product.id, 'personalQty', -1)} className="w-7 h-7 bg-white rounded border font-bold text-slate-700 hover:bg-slate-100">-</button>
-                                  <span className="w-8 text-center text-xs font-bold">{item.personalQty}</span>
-                                  <button onClick={() => updateItemQty(product.id, 'personalQty', 1)} className="w-7 h-7 bg-amber-500 text-white rounded font-bold hover:bg-amber-600">+</button>
+                                  <button onClick={() => updateItemQty(product.id, 'personalQty', -1)} className="w-8 h-8 bg-white rounded border font-bold text-slate-700 hover:bg-slate-100 text-sm">-</button>
+                                  <span className="w-8 text-center text-sm font-bold">{item.personalQty}</span>
+                                  <button onClick={() => updateItemQty(product.id, 'personalQty', 1)} className="w-8 h-8 bg-amber-500 text-white rounded font-bold hover:bg-amber-600 text-sm">+</button>
                                 </div>
                               </div>
                             ) : <div className="bg-slate-50 p-3 rounded text-center text-xs text-slate-400 font-bold">個人分不可</div>}
@@ -422,33 +422,36 @@
                     })}
                   </div>
 
-                  {/* サイドバー */}
-                  <div style={{width:280}}>
-                    <div className="bg-white rounded-2xl p-5 shadow-sm border space-y-4 sticky top-20">
-                      <h3 className="text-sm font-bold text-slate-800 border-b pb-3">発注申請 ({currentUnit})</h3>
+                  {/* サイドバー (右側: 5 - 幅をより広く設定) */}
+                  <div className="lg:col-span-5">
+                    <div className="bg-white rounded-2xl p-6 shadow-md border border-slate-200 space-y-5 sticky top-24">
+                      <h3 className="text-base font-bold text-slate-800 border-b pb-3 flex items-center justify-between">
+                        <span>発注申請</span>
+                        <span className="text-xs px-3 py-1 bg-sky-100 text-sky-800 rounded-full font-bold">{currentUnit} ユニット</span>
+                      </h3>
                       <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">発注担当者名 <span className="text-red-500">*</span></label>
+                        <label className="text-sm font-bold text-slate-700 block mb-1.5">発注担当者名 <span className="text-red-500">*</span></label>
                         <input type="text" value={currentUnitState.staffName || ''} onChange={e => updateUnitStaffName(e.target.value)}
-                          placeholder="例：佐藤 健太" className="w-full p-2.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                          placeholder="例：佐藤 健太" className="w-full p-3 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500" />
                       </div>
                       <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">申送りメモ（栄養士への連絡事項）</label>
+                        <label className="text-sm font-bold text-slate-700 block mb-1.5">申送りメモ（栄養士への連絡事項）</label>
                         <textarea value={currentUnitState.memo || ''} onChange={e => updateUnitMemo(e.target.value)}
                           placeholder="例：山田様食欲低下のためイオンサポート多めに…" rows={3}
-                          className="w-full p-2.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none" />
+                          className="w-full p-3 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none" />
                       </div>
-                      <div className="bg-slate-50 rounded-xl p-3 border">
-                        <h4 className="text-xs font-bold text-slate-600 mb-2">カート内容</h4>
+                      <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-2">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">現在選択中のカート内容</h4>
                         {Object.entries(currentUnitState.cart || {}).filter(([_,it]) => it.facilityQty + it.personalQty > 0).length === 0 ? (
-                          <p className="text-xs text-slate-400">商品が追加されていません</p>
+                          <p className="text-xs text-slate-400 py-2">商品が追加されていません</p>
                         ) : (
-                          <ul className="space-y-1">
+                          <ul className="space-y-1.5">
                             {Object.entries(currentUnitState.cart || {}).filter(([_,it]) => it.facilityQty + it.personalQty > 0).map(([pId, it]) => {
                               const p = systemSettings.products.find(pr => pr.id === parseInt(pId));
                               return p ? (
-                                <li key={pId} className="text-xs text-slate-700 flex justify-between">
-                                  <span className="truncate">{p.name}</span>
-                                  <span className="font-bold ml-2">{it.facilityQty + it.personalQty} {p.unit}</span>
+                                <li key={pId} className="text-xs text-slate-800 flex justify-between items-center py-1 border-b border-slate-200">
+                                  <span className="font-medium truncate">{p.name}</span>
+                                  <span className="font-bold ml-2 bg-white px-2 py-0.5 rounded border border-slate-300">{it.facilityQty + it.personalQty} {p.unit}</span>
                                 </li>
                               ) : null;
                             })}
@@ -456,11 +459,11 @@
                         )}
                       </div>
                       <button onClick={handleSubmitOrder}
-                        className="w-full py-3 text-white font-bold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all hover:opacity-90"
+                        className="w-full py-3.5 text-white font-bold text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all hover:opacity-90"
                         style={{background:'linear-gradient(90deg,#0284c7,#075985)'}}>
                         📤 [{currentUnit}] の発注を送信する
                       </button>
-                      <p className="text-xs text-slate-400 text-center">送信後、カートはクリアされます。履歴は「📋 発注履歴」タブで確認できます。</p>
+                      <p className="text-xs text-slate-500 text-center">送信後、カートはクリアされます。履歴は「📋 発注履歴」タブで確認できます。</p>
                     </div>
                   </div>
                 </div>
@@ -862,14 +865,19 @@
 
           {/* ===== FAX モーダル ===== */}
           {showFaxModal && (
-            <div className="fixed inset-0 bg-slate-900 bg-opacity-70 flex items-center justify-center p-4 overflow-y-auto" style={{zIndex:50,backdropFilter:'blur(4px)'}}>
-              <div className="bg-white rounded-3xl p-6 max-w-3xl w-full shadow-2xl space-y-4 my-8 border border-slate-200">
+            <div className="fixed inset-0 bg-slate-900 bg-opacity-70 flex items-center justify-center p-4 overflow-y-auto" style={{zIndex:50,top:'64px',backdropFilter:'blur(4px)'}}>
+              <div className="bg-white rounded-3xl p-6 max-w-4xl w-full shadow-2xl space-y-4 my-8 border border-slate-200">
                 <div className="flex items-center justify-between border-b pb-4 no-print">
-                  <h3 className="font-bold text-slate-800 text-lg">🖨️ FAX注文票 PDF出力プレビュー</h3>
-                  <button onClick={() => setShowFaxModal(false)} className="p-1 hover:bg-slate-100 rounded-full text-slate-400 font-bold text-xl">✕</button>
+                  <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
+                    <span>🖨️ FAX注文票 PDF出力プレビュー</span>
+                  </h3>
+                  <button onClick={() => setShowFaxModal(false)}
+                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-bold text-sm flex items-center gap-1 transition-all">
+                    ✖ 閉じる
+                  </button>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100 p-2 rounded-2xl no-print">
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100 p-2.5 rounded-2xl no-print">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-slate-600 px-1">送信先業者:</span>
                     {systemSettings.vendors.map(v => (
@@ -949,9 +957,12 @@
                     <div className="flex items-center justify-between pt-2 no-print">
                       <span className="text-xs text-slate-500 font-bold">※備考欄にユニット名が自動印字されます</span>
                       <div className="flex items-center gap-3">
-                        <button onClick={() => setShowFaxModal(false)} className="px-5 py-2.5 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-200">キャンセル</button>
+                        <button onClick={() => setShowFaxModal(false)}
+                          className="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-sm rounded-xl transition-all">
+                          ✖ 閉じる
+                        </button>
                         <button onClick={() => window.print()}
-                          className="px-6 py-2.5 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 hover:opacity-90"
+                          className="px-6 py-2.5 text-white font-bold text-sm rounded-xl shadow-lg flex items-center gap-2 hover:opacity-90"
                           style={{background:'linear-gradient(90deg,#059669,#0d9488)'}}>
                           📄 PDF出力（印刷）
                         </button>
@@ -962,8 +973,8 @@
                   <div className="py-10 text-center space-y-4 no-print">
                     <div className="text-6xl">✅</div>
                     <h4 className="font-bold text-slate-800 text-lg">PDF出力が完了しました！</h4>
-                    <p className="text-xs text-slate-500">印刷ダイアログで「PDFとして保存」を選択するか、そのまま印刷してください。</p>
-                    <button onClick={() => setShowFaxModal(false)} className="px-8 py-3 bg-slate-900 text-white font-bold text-xs rounded-xl">閉じる</button>
+                    <p className="text-sm text-slate-500">印刷ダイアログで「PDFとして保存」を選択するか、そのまま印刷してください。</p>
+                    <button onClick={() => setShowFaxModal(false)} className="px-8 py-3 bg-slate-900 text-white font-bold text-sm rounded-xl">✖ 閉じる</button>
                   </div>
                 )}
               </div>
