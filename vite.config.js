@@ -6,7 +6,9 @@ import { viteSingleFile } from 'vite-plugin-singlefile'
 export default defineConfig({
   plugins: [react(), viteSingleFile()],
   build: {
-    outDir: 'docs'
+    outDir: 'docs',
+    target: 'es2015',
+    minify: false
   },
   server: {
     port: 3000,
