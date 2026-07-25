@@ -106,10 +106,7 @@
         } catch { return DEFAULT_SETTINGS; }
       });
 
-      const [gasUrl, setGasUrl] = useState(() => {
-        try { return localStorage.getItem('NUTRITION_GAS_URL') || DEFAULT_GAS_URL; } catch { return DEFAULT_GAS_URL; }
-      });
-      const [isSavingGasUrl, setIsSavingGasUrl] = useState(false);
+      const gasUrl = DEFAULT_GAS_URL;
       const [isSendingToSheet, setIsSendingToSheet] = useState(false);
 
       const [newNutritionist, setNewNutritionist] = useState('');
@@ -159,12 +156,6 @@
           const img = new Image();
           img.src = `${gasUrl}?payload=${encodeURIComponent(payloadStr)}`;
         } catch (e) { console.log('GET fallback error', e); }
-      };
-
-      const handleSaveGasUrl = () => {
-        setIsSavingGasUrl(true);
-        try { localStorage.setItem('NUTRITION_GAS_URL', gasUrl); } catch {}
-        setTimeout(() => { setIsSavingGasUrl(false); showToast('✅ GAS Web App URLを保存しました！'); }, 500);
       };
 
       // ===== カート操作 =====
@@ -654,19 +645,7 @@
                   </button>
                 </div>
 
-                <div className="bg-white rounded-3xl p-6 shadow-md border-2 border-emerald-500 space-y-4">
-                  <h3 className="text-base font-bold text-slate-800">🔗 Google Apps Script (GAS) Webアプリ URL 設定</h3>
-                  <p className="text-xs text-slate-500">URLを入力すると、発注送信時に自動でスプレッドシートへ書き込まれます。</p>
-                  <div className="flex items-center gap-2">
-                    <input type="text" value={gasUrl} onChange={e => setGasUrl(e.target.value)}
-                      placeholder="例: https://script.google.com/macros/s/AKfycbx.../exec"
-                      className="flex-1 p-3 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono" />
-                    <button onClick={handleSaveGasUrl} disabled={isSavingGasUrl}
-                      className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1">
-                      ✅ URLを保存
-                    </button>
-                  </div>
-                </div>
+
 
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
                   <div className="flex items-center justify-between border-b pb-3">
