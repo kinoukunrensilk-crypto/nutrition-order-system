@@ -249,7 +249,71 @@
         });
         setOrderHistory(updatedHistory);
         try { localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(updatedHistory)); } catch {}
-        showToast('管理栄養士：発注履歴の数量を更新しました。');
+      // ===== 管理栄養士による個別の承認・完了処理 =====
+      const approveSingleOrder = (entryId) => {
+        const updatedHistory = orderHistory.map(entry => entry.id === entryId ? { ...entry, status: '承認済' } : entry);
+        setOrderHistory(updatedHistory);
+        try { localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(updatedHistory)); } catch {}
+        showToast('✅ 申請を承認済みに変更し、履歴へ保存しました。');
+      };
+
+      const approveAllOrders = () => {
+        if (confirm('本日届いているすべての発注申請を「承認済」にして履歴へ移動しますか？')) {
+          // 未送信カートも承認済みに変更してクリア
+          setUnitData(prev => {
+            const next = { ...prev };
+            Object.keys(next).forEach(k => {
+              next[k] = { cart: {}, memo: '', staffName: '', submittedAt: '' };
+            });
+            return next;
+          });
+          const updatedHistory = orderHistory.map(entry => ({ ...entry, status: '承認済' }));
+          setOrderHistory(updatedHistory);
+          try { localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(updatedHistory)); } catch {}
+          showToast('✅ すべての申請を承認済みに変更し、履歴へ移動しました！');
+        }
+      };
+
+      // ===== FAX出力＆承認完了処理 =====
+      const handlePrintAndApprove = () => {
+        // カート内の未送信アイテムがあれば、それを承認済にして履歴へ移動
+        const newHistoryEntries = [];
+        setUnitData(prev => {
+          const next = { ...prev };
+          Object.entries(next).forEach(([uKey, uVal]) => {
+            const items = Object.entries(uVal.cart || {}).filter(([_, it]) => (it.facilityQty + it.personalQty) > 0);
+            if (items.length > 0) {
+              const flatItems = [];
+              let isFirst = true;
+              items.forEach(([pId, item]) => {
+                const p = systemSettings.products.find(pr => pr.id === parseInt(pId));
+                if (!p) return;
+                if (item.facilityQty > 0) {
+                  flatItems.push({ time: getNowJST(), unit: uKey, staffName: uVal.staffName || '管理栄養士', productName: p.name, productUnit: p.unit, facilityQty: item.facilityQty, personalQty: 0, note: uKey, memo: isFirst ? uVal.memo : '' });
+                  isFirst = false;
+                }
+                if (item.personalQty > 0) {
+                  flatItems.push({ time: getNowJST(), unit: uKey, staffName: uVal.staffName || '管理栄養士', productName: p.name, productUnit: p.unit, facilityQty: 0, personalQty: item.personalQty, note: `${uKey} (${item.personalNames || '個人購入'})`, memo: isFirst ? uVal.memo : '' });
+                  isFirst = false;
+                }
+              });
+              newHistoryEntries.push({ id: Date.now() + Math.random(), submittedAt: getNowJST(), unit: uKey, staffName: uVal.staffName || '管理栄養士', memo: uVal.memo, items: flatItems, status: '承認済' });
+              next[uKey] = { cart: {}, memo: '', staffName: '', submittedAt: '' };
+            }
+          });
+          return next;
+        });
+
+        // 履歴の申請中エントリーをすべて承認済へ更新
+        setOrderHistory(prev => {
+          const updated = prev.map(entry => entry.status === '申請中' ? { ...entry, status: '承認済' } : entry);
+          const combined = [...newHistoryEntries, ...updated];
+          try { localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(combined)); } catch {}
+          return combined;
+        });
+
+        window.print();
+        showToast('✅ FAX出力を行いました。対象の発注を【承認済】にして履歴へ移動しました！');
       };
       const toggleProductPermission = (productId, field) => {
         setSystemSettings(p => ({ ...p, products: p.products.map(pr => pr.id === productId ? { ...pr, [field]: !pr[field] } : pr) }));
@@ -587,6 +651,10 @@
                       <p className="text-xs text-slate-500 mt-0.5">全ユニットから届いた申請明細です。各商品の数量変更や削除・申送り確認ができます。</p>
                     </div>
                     <div className="flex items-center gap-3">
+                      <button onClick={approveAllOrders}
+                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition-all">
+                        ✅ 全申請を一括承認する
+                      </button>
                       <div className="flex items-center gap-2">
                         <label className="text-xs font-bold text-slate-600">承認者:</label>
                         <select value={selectedApprover} onChange={e => setSelectedApprover(e.target.value)}
@@ -691,7 +759,13 @@
                             <span className="px-4 py-1.5 bg-emerald-800 text-white font-bold text-sm rounded-xl">{entry.unit} ユニット</span>
                             <span className="text-xs font-bold text-sky-900 bg-sky-100 px-3 py-1 rounded-lg">発注担当: {entry.staffName}</span>
                           </div>
-                          <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300">送信済み ({entry.submittedAt})</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300">送信済み ({entry.submittedAt})</span>
+                            <button onClick={() => approveSingleOrder(entry.id)}
+                              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow transition-all flex items-center gap-1">
+                              ✅ この申請を承認して履歴へ移す
+                            </button>
+                          </div>
                         </div>
 
                         {/* 特大 申し送りメモ表示カード */}
@@ -1098,10 +1172,10 @@
                           className="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-sm rounded-xl transition-all">
                           ✖ 閉じる
                         </button>
-                        <button onClick={() => window.print()}
+                        <button onClick={handlePrintAndApprove}
                           className="px-6 py-2.5 text-white font-bold text-sm rounded-xl shadow-lg flex items-center gap-2 hover:opacity-90"
                           style={{background:'linear-gradient(90deg,#059669,#0d9488)'}}>
-                          📄 PDF出力（印刷）
+                          📄 PDF出力（印刷 &amp; 承認完了）
                         </button>
                       </div>
                     </div>
