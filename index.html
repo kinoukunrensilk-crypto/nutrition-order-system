@@ -2,15 +2,27 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>栄養関連物品発注システム | シルクロード七福神</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+      window.onerror = function(msg, url, line, col, error) {
+        var el = document.getElementById('root');
+        if (el) {
+          el.innerHTML = '<div style="padding:20px;color:red;font-family:sans-serif;"><h2>⚠️ アプリ起動エラー</h2><p>' + msg + '</p><p><small>' + url + ':' + line + '</small></p></div>';
+        }
+      };
+    </script>
   </head>
   <body class="bg-slate-50 text-slate-800 font-sans antialiased selection:bg-sky-500 selection:text-white">
-    <div id="root"></div>
+    <div id="root">
+      <div style="padding: 40px; text-align: center; font-family: sans-serif; color: #475569;">
+        <h3 style="margin-bottom: 8px;">🔄 栄養管理物品発注システムを読み込み中...</h3>
+        <p style="font-size: 12px; color: #94a3b8;">画面が切り替わらない場合は再読み込みしてください。</p>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
