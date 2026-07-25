@@ -69,16 +69,7 @@
       { id: 303, name: 'すり味噌',                          unit: '個', vendorId: 2, isToromi: false, allowPersonal: false, allowFacility: true  },
       { id: 401, name: '無洗米・精米',                      unit: 'kg', vendorId: 3, isToromi: false, allowPersonal: false, allowFacility: true  }
     ];
-    const INIT_UNIT_DATA = {
-      '2W': { cart: { 101: { facilityQty: 0, personalQty: 1, personalNames: '山田 太郎様' }, 201: { facilityQty: 2, personalQty: 0, personalNames: '' }, 203: { facilityQty: 3, personalQty: 0, personalNames: '' } }, memo: '【2W申送り】山田様食欲低下のためイオンサポート多めに申請します。', staffName: '佐藤 健太', submittedAt: '' },
-      '2E': { cart: { 102: { facilityQty: 1, personalQty: 1, personalNames: '佐藤 花子様' }, 202: { facilityQty: 2, personalQty: 0, personalNames: '' } }, memo: '2Eユニットの補充用トロミ剤です。', staffName: '田中 美咲', submittedAt: '' },
-      '3W': { cart: { 103: { facilityQty: 1, personalQty: 0, personalNames: '' }, 301: { facilityQty: 2, personalQty: 0, personalNames: '' }, 204: { facilityQty: 5, personalQty: 0, personalNames: '' } }, memo: '3W食堂用の醤油とゼリーです。', staffName: '鈴木 大輔', submittedAt: '' },
-      '3E': { cart: { 401: { facilityQty: 30, personalQty: 0, personalNames: '' }, 302: { facilityQty: 1, personalQty: 0, personalNames: '' }, 303: { facilityQty: 2, personalQty: 0, personalNames: '' } }, memo: '3E用無洗米30kgと薄口醤油・お味噌の追加です。', staffName: '高橋 涼子', submittedAt: '' },
-      '4W': { cart: { 401: { facilityQty: 40, personalQty: 0, personalNames: '' }, 301: { facilityQty: 2, personalQty: 0, personalNames: '' }, 101: { facilityQty: 0, personalQty: 2, personalNames: '中村 雅人様' } }, memo: '4W中村様のソフティア個人分2個です。', staffName: '木村 次郎', submittedAt: '' },
-      '4E': { cart: { 102: { facilityQty: 2, personalQty: 0, personalNames: '' }, 202: { facilityQty: 0, personalQty: 1, personalNames: '小林 節子様' } }, memo: '小林様ご所望のふりかけ大袋個人購入です。', staffName: '加藤 恵', submittedAt: '' },
-      '5W': { cart: { 203: { facilityQty: 4, personalQty: 0, personalNames: '' }, 204: { facilityQty: 4, personalQty: 0, personalNames: '' } }, memo: '水分補給用イオンサポート各4個。', staffName: '渡辺 誠', submittedAt: '' },
-      '5E': { cart: { 401: { facilityQty: 30, personalQty: 0, personalNames: '' }, 301: { facilityQty: 1, personalQty: 0, personalNames: '' } }, memo: '5Eお米と醤油です。', staffName: '山本 愛', submittedAt: '' }
-    };
+    const INIT_UNIT_DATA = {};
 
     function App() {
       const [role, setRole] = useState('staff');
