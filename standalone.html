@@ -137,17 +137,36 @@
         } else { setSettingsAuthError('パスワードが正しくありません'); }
       };
 
-      // ===== GAS送信 =====
+      // ===== GAS送信（4重ハイブリッド完全送信仕様） =====
       const sendToGAS = async (items) => {
         if (!gasUrl) return;
-        const payloadStr = JSON.stringify({ action: 'bulkSubmit', items });
+        const payloadObj = { action: 'bulkSubmit', items };
+        const payloadStr = JSON.stringify(payloadObj);
+
+        // 1. POST fetch
         try {
-          await fetch(gasUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: payloadStr, mode: 'no-cors' });
-        } catch (e) { console.log('POST error', e); }
+          fetch(gasUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: payloadStr, mode: 'no-cors' });
+        } catch (e) {}
+
+        // 2. sendBeacon (ブラウザバックグラウンド送信)
+        try {
+          if (navigator.sendBeacon) {
+            const blob = new Blob([payloadStr], { type: 'text/plain;charset=utf-8' });
+            navigator.sendBeacon(gasUrl, blob);
+          }
+        } catch (e) {}
+
+        // 3. GET fetch (JSONP風)
+        const getUrl = `${gasUrl}?payload=${encodeURIComponent(payloadStr)}`;
+        try {
+          fetch(getUrl, { mode: 'no-cors' });
+        } catch (e) {}
+
+        // 4. Image ping (CORSバイパスの最強力バックアップ)
         try {
           const img = new Image();
-          img.src = `${gasUrl}?payload=${encodeURIComponent(payloadStr)}`;
-        } catch (e) { console.log('GET fallback error', e); }
+          img.src = getUrl;
+        } catch (e) {}
       };
 
       // ===== カート操作 =====
