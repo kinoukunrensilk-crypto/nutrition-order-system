@@ -82,6 +82,16 @@ function doPost(e) {
 function processData(data) {
   if (!data) return responseJSON({ success: false, error: 'データが空です' });
 
+  // 重複送信の自動防止 (過去10秒以内の同一送信をブロック)
+  try {
+    const cache = CacheService.getScriptCache();
+    const cacheKey = Utilities.base64Encode(JSON.stringify(data)).substring(0, 200);
+    if (cache.get(cacheKey)) {
+      return responseJSON({ success: true, message: '重複送信を自動検出してスキップしました' });
+    }
+    cache.put(cacheKey, 'true', 10);
+  } catch (e) {}
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('発注データ');
   if (!sheet) {

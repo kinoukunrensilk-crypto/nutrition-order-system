@@ -137,17 +137,37 @@
         } else { setSettingsAuthError('パスワードが正しくありません'); }
       };
 
-      // ===== GAS送信（単一確実送信仕様） =====
+      // ===== GAS送信（隠しフォームPOSTによる二重送信完全防止仕様） =====
       const sendToGAS = async (items) => {
         if (!gasUrl) return;
         const payloadStr = JSON.stringify({ action: 'bulkSubmit', items });
+
         try {
-          await fetch(gasUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: payloadStr,
-            mode: 'no-cors'
-          });
+          // 隠しiframe作成
+          let iframe = document.getElementById('gas_hidden_iframe');
+          if (!iframe) {
+            iframe = document.createElement('iframe');
+            iframe.id = 'gas_hidden_iframe';
+            iframe.name = 'gas_hidden_iframe';
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
+          }
+
+          // 隠しform作成してPOST送信
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = gasUrl;
+          form.target = 'gas_hidden_iframe';
+
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'payload';
+          input.value = payloadStr;
+
+          form.appendChild(input);
+          document.body.appendChild(form);
+          form.submit();
+          document.body.removeChild(form);
         } catch (e) {
           console.error('GAS送信エラー:', e);
         }
