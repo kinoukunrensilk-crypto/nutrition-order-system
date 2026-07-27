@@ -619,7 +619,15 @@
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 bg-slate-800 p-1.5 rounded-xl border border-slate-700">
                   {navTabs.map(tab => (
-                    <button key={tab.key} onClick={() => { setShowFaxModal(false); setRole(tab.key); }}
+                    <button key={tab.key} onClick={() => {
+                        setShowFaxModal(false);
+                        setRole(tab.key);
+                        if (tab.key !== 'settings') {
+                          setIsSettingsAuth(false);
+                          setSettingsPasswordInput('');
+                          setSettingsAuthError('');
+                        }
+                      }}
                       className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${role === tab.key ? 'bg-sky-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}>
                       {tab.label}
                     </button>
@@ -967,7 +975,7 @@
                         </div>
                         <form onSubmit={handleSettingsAuthSubmit} className="space-y-4">
                           <input type="password" value={settingsPasswordInput} onChange={e => setSettingsPasswordInput(e.target.value)}
-                            placeholder="暗証番号を入力 (例: eiyou0729)" className="w-full p-3.5 text-center text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                            placeholder="管理栄養士の暗証番号を入力" className="w-full p-3.5 text-center text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500" />
                           {settingsAuthError && <p className="text-xs font-bold text-red-500">{settingsAuthError}</p>}
                           <button type="submit" className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm rounded-xl shadow-lg transition-all">
                             ロック解除
