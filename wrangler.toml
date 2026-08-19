@@ -8,7 +8,5 @@ directory = "./docs"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 
-[[d1_databases]]
-binding = "DB"
-database_name = "nutrition-db"
-database_id = "nutrition-db-id"
+# D1データベースはCloudflareダッシュボードの「Bindings」タブから
+# 変数名: DB としてバインドできます。
