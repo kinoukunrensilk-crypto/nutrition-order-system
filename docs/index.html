@@ -984,14 +984,15 @@
                       </div>
                     ) : (
                       <div className="space-y-6">
-                        <div className="bg-white rounded-2xl p-4 shadow-sm border flex items-center justify-between">
-                          <span className="text-sm font-bold text-emerald-700 flex items-center gap-2">
-                            <span>🔓</span> <span>マスター管理認証解除中 (スプレッドシート完全連携モード)</span>
-                          </span>
-                          <button onClick={fetchInitialData} className="px-3.5 py-1.5 bg-sky-100 text-sky-800 hover:bg-sky-200 rounded-xl font-bold text-xs border border-sky-300">
-                            🔄 スプレッドシートからマスター再読み込み
-                          </button>
-                        </div>
+                        <div className="bg-white rounded-3xl p-4 shadow-sm border border-amber-200/70 flex items-center justify-between">
+    <span className="text-sm font-bold text-amber-900 flex items-center gap-2">
+      <span>🔓</span> <span>マスター管理設定中</span>
+    </span>
+    <button onClick={() => { setIsSettingsAuth(false); setSettingsPasswordInput(''); showToast('🔒 設定画面をロックしました'); }}
+      className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl font-bold text-xs border border-stone-300 flex items-center gap-1.5 transition-all shadow-xs">
+      🔒 設定をロックして終了
+    </button>
+  </div>
 
                         {/* ステップ切替タブ */}
                         <div className="flex border-b border-slate-300 space-x-4">
@@ -1000,10 +1001,10 @@
                             { step: 2, label: '🏬 業者マスター管理' },
                             { step: 3, label: '🏢 ユニットマスター管理' },
                             { step: 4, label: '👩‍⚕️ 管理栄養士マスター' },
-                            { step: 5, label: '🌐 GASシステム接続設定' },
+                            
                           ].map(s => (
                             <button key={s.step} onClick={() => setSettingStep(s.step)}
-                              className={`pb-3 text-sm font-bold border-b-2 transition-all ${settingStep === s.step ? 'border-sky-600 text-sky-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+                              className={`pb-3 text-sm font-bold border-b-2 transition-all ${settingStep === s.step ? 'border-orange-600 text-orange-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
                               {s.label}
                             </button>
                           ))}
