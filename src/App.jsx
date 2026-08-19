@@ -37,8 +37,21 @@ import {
   History,
   Download,
   Lock,
-  KeyRound
+  KeyRound,
+  Wifi,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  Zap,
+  Globe
 } from 'lucide-react';
+import AccessDenied from './components/AccessDenied.jsx';
+import { 
+  fetchInitialData, 
+  submitOrderToD1, 
+  fetchOrdersFromD1, 
+  saveSettingsToD1 
+} from './api/client.js';
 
 // ===== JST日時ヘルパー =====
 const getNowJST = () => {
@@ -196,6 +209,44 @@ export default function App() {
     } catch { return []; }
   });
   const [expandedHistoryId, setExpandedHistoryId] = useState(null);
+
+  // ===== Cloudflare D1 & 施設Wi-Fi限定セキュリティ state =====
+  const [isD1Connected, setIsD1Connected] = useState(false);
+  const [isForbidden, setIsForbidden] = useState(false);
+  const [clientIp, setClientIp] = useState('');
+  const [allowedIps, setAllowedIps] = useState([]);
+  const [newIpInput, setNewIpInput] = useState('');
+  const [isSavingIps, setIsSavingIps] = useState(false);
+
+  // 初期ロード：Cloudflare D1から設定・マスタを取得
+  useEffect(() => {
+    async function loadCloudflareData() {
+      const init = await fetchInitialData();
+      if (!init) return;
+
+      if (init.isForbidden) {
+        setIsForbidden(true);
+        setClientIp(init.clientIp || '');
+        return;
+      }
+
+      if (init.settings) {
+        setIsD1Connected(true);
+        if (Array.isArray(init.settings.allowed_ips)) {
+          setAllowedIps(init.settings.allowed_ips);
+        }
+        setSystemSettings(prev => ({
+          ...prev,
+          vendors: (init.vendors && init.vendors.length > 0) ? init.vendors : prev.vendors,
+          products: (init.products && init.products.length > 0) ? init.products : prev.products,
+          nutritionists: init.settings.nutritionists || prev.nutritionists,
+          deadlineTime: init.settings.deadlineTime || prev.deadlineTime,
+          orderDaysList: init.settings.orderDaysList || prev.orderDaysList
+        }));
+      }
+    }
+    loadCloudflareData();
+  }, []);
 
   // 設定画面のパスワード保護用state (暗証番号: eiyou0729)
   const [isSettingsAuth, setIsSettingsAuth] = useState(false);
@@ -471,9 +522,36 @@ export default function App() {
     };
     const updatedHistory = [newEntry, ...orderHistory];
     setOrderHistory(updatedHistory);
-    localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(updatedHistory));
+    // ===== Cloudflare D1 データベースへの即時保存 =====
+    const d1Payload = {
+      unit: currentUnit,
+      staffName,
+      orderDate: getTodayJST(),
+      nutritionist: selectedApprover,
+      memo,
+      items: items.map(([pId, item]) => {
+        const p = systemSettings.products.find(prod => prod.id === parseInt(pId));
+        return {
+          id: p ? p.id : parseInt(pId, 10),
+          name: p ? p.name : '',
+          vendorId: p ? p.vendorId : 1,
+          unit: p ? p.unit : '個',
+          facilityQty: item.facilityQty,
+          personalQty: item.personalQty,
+          personalMemo: item.personalNames || ''
+        };
+      })
+    };
 
-    // GASへ送信
+    submitOrderToD1(d1Payload).then(res => {
+      if (res && res.isForbidden) {
+        setIsForbidden(true);
+      } else if (res && res.success) {
+        console.log('[D1] Saved order to Cloudflare:', res.orderNumber);
+      }
+    });
+
+    // Googleスプレッドシートへもバックアップ送信
     await sendToGAS(flatItems);
 
     // カートクリア
@@ -577,6 +655,11 @@ export default function App() {
     });
   });
 
+  // ===== 施設Wi-Fiアクセス制限時の案内画面 =====
+  if (isForbidden) {
+    return <AccessDenied clientIp={clientIp} onRetry={() => window.location.reload()} />;
+  }
+
   // ===== JSX レンダリング =====
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
@@ -597,7 +680,19 @@ export default function App() {
                 <FileSpreadsheet className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold leading-tight">栄養管理物品発注システム</h1>
+                <div className="flex items-center space-x-2">
+                  <h1 className="text-base font-bold leading-tight">栄養管理物品発注システム</h1>
+                  {isD1Connected && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      <Zap className="w-3 h-3 text-emerald-400" /> D1高速
+                    </span>
+                  )}
+                  {allowedIps && allowedIps.length > 0 && (
+                    <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                      <ShieldCheck className="w-3 h-3 text-sky-400" /> Wi-Fi限定
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-400">特別養護老人ホーム シルクロード七福神</p>
               </div>
             </div>
@@ -1080,15 +1175,16 @@ export default function App() {
               </div>
 
             {/* ステップ切替ナビ */}
-            <div className="flex items-center space-x-2 bg-white p-2 rounded-2xl shadow-sm border">
+            <div className="flex items-center space-x-2 bg-white p-2 rounded-2xl shadow-sm border overflow-x-auto">
               {[
-                { step: 1, label: 'ステップ1: 栄養士・曜日ルール' },
-                { step: 2, label: 'ステップ2: ユニット管理' },
+                { step: 1, label: 'ステップ1: 栄養士・曜日' },
+                { step: 2, label: 'ステップ2: ユニット' },
                 { step: 3, label: 'ステップ3: 発注先業者' },
-                { step: 4, label: 'ステップ4: 商品・購入区分' }
+                { step: 4, label: 'ステップ4: 商品・区分' },
+                { step: 5, label: 'ステップ5: 📶 施設Wi-Fi限定' }
               ].map(s => (
                 <button key={s.step} onClick={() => setSettingStep(s.step)}
-                  className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all ${settingStep === s.step ? 'bg-amber-600 text-white shadow-md' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
+                  className={`flex-1 min-w-[120px] py-2.5 text-xs font-bold rounded-xl transition-all ${settingStep === s.step ? 'bg-amber-600 text-white shadow-md' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
                   {s.label}
                 </button>
               ))}
@@ -1243,6 +1339,117 @@ export default function App() {
                   <button onClick={handleAddProduct} className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl flex items-center space-x-1">
                     <Plus className="w-4 h-4" /><span>商品を追加</span>
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* ===== ステップ5: 📶 施設Wi-Fi（IP制限）セキュリティ ===== */}
+            {settingStep === 5 && (
+              <div className="bg-white rounded-2xl p-6 shadow-sm border space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between border-b pb-4 gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-sky-600" />
+                      <span>施設Wi-Fi（IP制限）アクセス制御設定</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      施設内Wi-FiのグローバルIPアドレスを登録すると、施設外からのアクセスを自動的に403遮断し、情報漏洩を防ぎます。
+                    </p>
+                  </div>
+                  <span className={`self-start px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${
+                    allowedIps.length > 0 ? 'bg-sky-100 text-sky-800 border border-sky-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  }`}>
+                    {allowedIps.length > 0 ? '🔒 施設Wi-Fi限定ガード稼働中' : '🌐 オープン（全通信許可）'}
+                  </span>
+                </div>
+
+                <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-sky-900">📡 現在接続中のIPアドレス:</span>
+                    <span className="font-mono text-xs font-black bg-white text-sky-950 px-3 py-1 rounded-lg border border-sky-300 shadow-sm">
+                      {clientIp || '127.0.0.1 (ローカル開発中)'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-sky-700">
+                    ※施設のWi-Fiに接続した端末からこの画面を開き、「現在のIPを登録」ボタンを押すだけで簡単に施設Wi-Fiを許可リストに追加できます。
+                  </p>
+                </div>
+
+                {/* 登録済みIP一覧 */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-700">登録済み施設IPホワイトリスト ({allowedIps.length}件):</h4>
+                  {allowedIps.length === 0 ? (
+                    <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center text-xs text-slate-500">
+                      許可IPは登録されていません（初期移行モード：全ネットワークからアクセス可能）。
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {allowedIps.map((ip, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <div className="flex items-center gap-2">
+                            <Wifi className="w-4 h-4 text-sky-600" />
+                            <span className="font-mono text-xs font-bold text-slate-800">{ip}</span>
+                            {ip === clientIp && (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">現在のIP</span>
+                            )}
+                          </div>
+                          <button
+                            onClick={async () => {
+                              const updated = allowedIps.filter((_, i) => i !== idx);
+                              setAllowedIps(updated);
+                              await saveSettingsToD1({ allowedIps: updated });
+                              showToast('IPを削除しました。');
+                            }}
+                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* IP追加入力 */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                  <h4 className="text-xs font-bold text-slate-800">新規IPアドレスの追加</h4>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={newIpInput}
+                      onChange={(e) => setNewIpInput(e.target.value)}
+                      placeholder="例: 210.140.50.100"
+                      className="flex-1 p-2.5 text-xs rounded-xl border border-slate-300 font-mono focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                    {clientIp && !allowedIps.includes(clientIp) && (
+                      <button
+                        onClick={async () => {
+                          const updated = [...allowedIps, clientIp];
+                          setAllowedIps(updated);
+                          await saveSettingsToD1({ allowedIps: updated });
+                          showToast(`現在のIP (${clientIp}) を施設許可リストに追加しました！`);
+                        }}
+                        className="px-4 py-2.5 bg-sky-100 hover:bg-sky-200 text-sky-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1 border border-sky-300"
+                      >
+                        <Wifi className="w-3.5 h-3.5" /><span>現在のIPを登録</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={async () => {
+                        const trimmed = newIpInput.trim();
+                        if (!trimmed) return alert('IPアドレスを入力してください。');
+                        if (allowedIps.includes(trimmed)) return alert('既に登録されています。');
+                        const updated = [...allowedIps, trimmed];
+                        setAllowedIps(updated);
+                        setNewIpInput('');
+                        await saveSettingsToD1({ allowedIps: updated });
+                        showToast(`IP (${trimmed}) をD1に保存しました！`);
+                      }}
+                      className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1"
+                    >
+                      <Plus className="w-4 h-4" /><span>追加してD1へ保存</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
