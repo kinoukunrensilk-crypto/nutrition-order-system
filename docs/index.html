@@ -23,11 +23,22 @@
   <style>
     body { font-family: 'Noto Sans JP', 'Inter', sans-serif; }
     @media print {
-      body * { visibility: hidden; }
-      #fax-print-area, #fax-print-area * { visibility: visible; }
-      #fax-print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 12mm 15mm; background: #fff; font-size: 11pt; }
-      .no-print { display: none !important; }
-      @page { size: A4 portrait; margin: 10mm; }
+      body * { visibility: hidden !important; }
+      #fax-print-area, #fax-print-area * { visibility: visible !important; }
+      #fax-print-area {
+        position: fixed !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 8mm 12mm !important;
+        background: #fff !important;
+        font-size: 11pt !important;
+        box-shadow: none !important;
+        border: none !important;
+      }
+      .no-print, .no-print * { display: none !important; }
+      @page { size: A4 portrait; margin: 8mm; }
     }
   </style>
 </head>
@@ -92,7 +103,22 @@
       const [role, setRole] = useState('staff');
       const [settingStep, setSettingStep] = useState(1);
       const [currentUnit, setCurrentUnit] = useState('2W');
-      const [selectedApprover, setSelectedApprover] = useState('野元 史彦');
+      const [selectedApprover, setSelectedApprover] = useState(() => {
+        return localStorage.getItem('NUTRITION_SELECTED_APPROVER') || '野元 史彦';
+      });
+      const [facilityInfo, setFacilityInfo] = useState(() => {
+        try {
+          const saved = localStorage.getItem('NUTRITION_FACILITY_INFO');
+          if (saved) return JSON.parse(saved);
+        } catch(e) {}
+        return {
+          name: '特別養護老人ホーム シルクロード七福神',
+          postal: '〒890-0082',
+          address: '鹿児島県鹿児島市紫原5丁目13-18',
+          tel: '099-256-2729',
+          fax: '099-256-3729'
+        };
+      });
       const [showFaxModal, setShowFaxModal] = useState(false);
       const [faxStatus, setFaxStatus] = useState('preview');
       const [selectedFaxVendorId, setSelectedFaxVendorId] = useState(1);
@@ -256,19 +282,29 @@
         });
       };
 
-      // ===== カート操作 (お米5kg増減 & 数量ガード) =====
+      // ===== カート操作 (1単位増減 & キーボード直接数値入力対応) =====
       const currentUnitState = unitData[currentUnit] || { cart: {}, memo: '', staffName: '', submittedAt: '' };
 
       const updateItemQty = (productId, field, delta) => {
-        const product = masterProducts.find(pr => pr.id === productId);
-        const isRiceOrKg = product && (product.unit === 'kg' || product.name.includes('米') || product.name.includes('こめ'));
-        const step = isRiceOrKg ? (delta > 0 ? 5 : -5) : delta;
-
         setUnitData(prev => {
           const unitInfo = prev[currentUnit] || { cart: {}, memo: '', staffName: '' };
           const currentItem = unitInfo.cart[productId] || { facilityQty: 0, personalQty: 0, personalNames: '' };
-          const nextQty = Math.max(0, currentItem[field] + step);
+          const currentVal = Number(currentItem[field]) || 0;
+          const nextQty = Math.max(0, currentVal + delta);
           const updatedItem = { ...currentItem, [field]: nextQty };
+          const newCart = { ...unitInfo.cart };
+          if (updatedItem.facilityQty === 0 && updatedItem.personalQty === 0) { delete newCart[productId]; }
+          else { newCart[productId] = updatedItem; }
+          return { ...prev, [currentUnit]: { ...unitInfo, cart: newCart } };
+        });
+      };
+
+      const setItemQtyDirect = (productId, field, val) => {
+        const num = val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0);
+        setUnitData(prev => {
+          const unitInfo = prev[currentUnit] || { cart: {}, memo: '', staffName: '' };
+          const currentItem = unitInfo.cart[productId] || { facilityQty: 0, personalQty: 0, personalNames: '' };
+          const updatedItem = { ...currentItem, [field]: num };
           const newCart = { ...unitInfo.cart };
           if (updatedItem.facilityQty === 0 && updatedItem.personalQty === 0) { delete newCart[productId]; }
           else { newCart[productId] = updatedItem; }
@@ -464,6 +500,24 @@
         showToast(`【${item.name}】を${nextActive ? '有効化' : '無効化'}しました。`);
       };
 
+      const deleteMasterItem = async (masterType, item) => {
+        if (!confirm(`本当に【${item.name}】をマスターから完全に削除しますか？\n※この操作は取り消せません。`)) {
+          return;
+        }
+        if (masterType === 'product') {
+          setMasterProducts(prev => prev.filter(p => p.id !== item.id));
+        } else if (masterType === 'vendor') {
+          setMasterVendors(prev => prev.filter(v => v.id !== item.id));
+        } else if (masterType === 'unit') {
+          setMasterUnits(prev => prev.filter(u => u.id !== item.id));
+        } else if (masterType === 'nutritionist') {
+          setMasterNutritionists(prev => prev.filter(n => n.id !== item.id));
+        }
+
+        await postToGAS({ action: 'deleteMaster', masterType, id: item.id, item });
+        showToast(`マスター情報【${item.name}】を削除しました。`);
+      };
+
       // 締切チェック
       const isAfterDeadline = () => {
         const now = new Date();
@@ -524,25 +578,30 @@
         }
       };
 
-      // 業者別発注リスト取得 (マスター連動)
+      // 業者別発注リスト取得 (マスター連動 & 申請中・承認済両対応)
       const getOrdersForVendor = (vendorId) => {
         const list = [];
-        // カート内
+        const vId = Number(vendorId);
+
+        // カート内 (未送信)
         Object.entries(unitData).forEach(([uKey, uVal]) => {
           Object.entries(uVal.cart || {}).forEach(([pId, item]) => {
-            const p = masterProducts.find(pr => pr.id === parseInt(pId));
-            if (p && p.vendorId === vendorId) {
-              if (item.facilityQty > 0) list.push({ name: p.name, spec: p.spec, qty: item.facilityQty, unit: p.unit, note: uKey, unitName: uKey });
-              if (item.personalQty > 0) list.push({ name: p.name, spec: p.spec, qty: item.personalQty, unit: p.unit, note: `${uKey} (${item.personalNames || '個人購入'})`, unitName: uKey });
+            const p = masterProducts.find(pr => Number(pr.id) === parseInt(pId));
+            if (p && Number(p.vendorId) === vId) {
+              if (item.facilityQty > 0) list.push({ name: p.name, spec: p.spec, qty: Number(item.facilityQty), unit: p.unit, note: uKey, unitName: uKey });
+              if (item.personalQty > 0) list.push({ name: p.name, spec: p.spec, qty: Number(item.personalQty), unit: p.unit, note: `${uKey} (${item.personalNames || '個人購入'})`, unitName: uKey });
             }
           });
         });
-        // 申請中履歴
-        orderHistory.filter(h => h.status === '申請中').forEach(entry => {
+
+        // 履歴データ (申請中 または 承認済の発注を網羅)
+        orderHistory.filter(h => h.status === '申請中' || h.status === '承認済').forEach(entry => {
           (entry.items || []).forEach(item => {
-            if (item.vendorId === vendorId) {
-              if (item.facilityQty > 0) list.push({ name: item.productName, spec: item.spec, qty: item.facilityQty, unit: item.productUnit, note: item.note || item.unit, unitName: item.unit });
-              if (item.personalQty > 0) list.push({ name: item.productName, spec: item.spec, qty: item.personalQty, unit: item.productUnit, note: item.note || item.unit, unitName: item.unit });
+            const prod = masterProducts.find(pr => Number(pr.id) === Number(item.productId));
+            const itemVendorId = Number(item.vendorId) || (prod ? Number(prod.vendorId) : 0);
+            if (itemVendorId === vId) {
+              if (item.facilityQty > 0) list.push({ name: item.productName, spec: item.spec, qty: Number(item.facilityQty), unit: item.productUnit, note: item.note || item.unit, unitName: item.unit });
+              if (item.personalQty > 0) list.push({ name: item.productName, spec: item.spec, qty: Number(item.personalQty), unit: item.productUnit, note: item.note || item.unit, unitName: item.unit });
             }
           });
         });
@@ -711,21 +770,21 @@
                               <div className="mt-4 pt-3 border-t grid grid-cols-2 gap-4">
                                 {product.allowFacility ? (
                                   <div className="bg-sky-50 rounded-xl p-3 border flex justify-between items-center">
-                                    <span className="text-xs font-bold text-sky-900">施設分 ({stepText}単位)</span>
-                                    <div className="flex items-center gap-2">
-                                      <button onClick={() => updateItemQty(product.id, 'facilityQty', -1)} className="w-9 h-9 bg-white rounded-xl border border-stone-200 font-black text-stone-700 hover:bg-stone-50 active:scale-95 shadow-sm text-sm">-</button>
-                                      <span className="w-10 text-center text-sm font-bold">{item.facilityQty}</span>
-                                      <button onClick={() => updateItemQty(product.id, 'facilityQty', 1)} className="w-9 h-9 bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-xl font-black hover:opacity-90 active:scale-95 shadow-sm text-sm">+</button>
+                                    <span className="text-xs font-bold text-sky-900">施設分</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <button onClick={() => updateItemQty(product.id, 'facilityQty', -1)} className="w-8 h-8 bg-white rounded-lg border border-stone-300 font-black text-stone-700 hover:bg-stone-100 active:scale-95 shadow-sm text-sm">-</button>
+                                      <input type="number" min="0" value={item.facilityQty || ''} onChange={e => setItemQtyDirect(product.id, 'facilityQty', e.target.value)} placeholder="0" className="w-14 text-center text-sm font-bold bg-white border border-stone-300 rounded-lg py-1 focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-inner" />
+                                      <button onClick={() => updateItemQty(product.id, 'facilityQty', 1)} className="w-8 h-8 bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-lg font-black hover:opacity-90 active:scale-95 shadow-sm text-sm">+</button>
                                     </div>
                                   </div>
                                 ) : <div className="bg-slate-50 p-3 rounded text-center text-xs text-slate-400 font-bold">施設分不可</div>}
                                 {product.allowPersonal ? (
                                   <div className="bg-amber-50 rounded-xl p-3 border flex justify-between items-center">
-                                    <span className="text-xs font-bold text-amber-900">個人分 ({stepText}単位)</span>
-                                    <div className="flex items-center gap-2">
-                                      <button onClick={() => updateItemQty(product.id, 'personalQty', -1)} className="w-9 h-9 bg-white rounded-xl border border-stone-200 font-black text-stone-700 hover:bg-stone-50 active:scale-95 shadow-sm text-sm">-</button>
-                                      <span className="w-10 text-center text-sm font-bold">{item.personalQty}</span>
-                                      <button onClick={() => updateItemQty(product.id, 'personalQty', 1)} className="w-9 h-9 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-black hover:opacity-90 active:scale-95 shadow-sm text-sm">+</button>
+                                    <span className="text-xs font-bold text-amber-900">個人分</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <button onClick={() => updateItemQty(product.id, 'personalQty', -1)} className="w-8 h-8 bg-white rounded-lg border border-stone-300 font-black text-stone-700 hover:bg-stone-100 active:scale-95 shadow-sm text-sm">-</button>
+                                      <input type="number" min="0" value={item.personalQty || ''} onChange={e => setItemQtyDirect(product.id, 'personalQty', e.target.value)} placeholder="0" className="w-14 text-center text-sm font-bold bg-white border border-stone-300 rounded-lg py-1 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner" />
+                                      <button onClick={() => updateItemQty(product.id, 'personalQty', 1)} className="w-8 h-8 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg font-black hover:opacity-90 active:scale-95 shadow-sm text-sm">+</button>
                                     </div>
                                   </div>
                                 ) : <div className="bg-slate-50 p-3 rounded text-center text-xs text-slate-400 font-bold">個人分不可</div>}
@@ -1073,10 +1132,16 @@
                                             </span>
                                           </td>
                                           <td className="p-2.5 text-center">
-                                            <button onClick={() => toggleMasterActive('product', p)}
-                                              className={`px-3 py-1 text-xs font-bold rounded-lg border ${p.active !== false ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
-                                              {p.active !== false ? '無効化' : '有効化'}
-                                            </button>
+                                            <div className="flex items-center justify-center gap-1.5">
+                                              <button onClick={() => toggleMasterActive('product', p)}
+                                                className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${p.active !== false ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}>
+                                                {p.active !== false ? '無効化' : '有効化'}
+                                              </button>
+                                              <button onClick={() => deleteMasterItem('product', p)}
+                                                className="px-2.5 py-1 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm flex items-center gap-0.5">
+                                                🗑️ 削除
+                                              </button>
+                                            </div>
                                           </td>
                                         </tr>
                                       );
@@ -1122,7 +1187,10 @@
                                       <td className="p-2.5 font-bold">{v.faxFormat === 'B' ? '様式B (合計計算行)' : '様式A (標準)'}</td>
                                       <td className="p-2.5 text-center"><span className={`px-2 py-0.5 rounded text-xs font-bold ${v.active !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>{v.active !== false ? '有効' : '無効'}</span></td>
                                       <td className="p-2.5 text-center">
-                                        <button onClick={() => toggleMasterActive('vendor', v)} className={`px-3 py-1 text-xs font-bold rounded-lg border ${v.active !== false ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>{v.active !== false ? '無効化' : '有効化'}</button>
+                                        <div className="flex items-center justify-center gap-1.5">
+                                          <button onClick={() => toggleMasterActive('vendor', v)} className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${v.active !== false ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}>{v.active !== false ? '無効化' : '有効化'}</button>
+                                          <button onClick={() => deleteMasterItem('vendor', v)} className="px-2.5 py-1 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm flex items-center gap-0.5">🗑️ 削除</button>
+                                        </div>
                                       </td>
                                     </tr>
                                   ))}
@@ -1146,9 +1214,10 @@
                               <h3 className="text-sm font-bold text-slate-800">ユニット一覧</h3>
                               <div className="flex flex-wrap gap-3">
                                 {masterUnits.map(u => (
-                                  <div key={u.id} className="p-3 bg-slate-50 rounded-xl border flex items-center gap-3">
+                                  <div key={u.id} className="p-3 bg-slate-50 rounded-xl border flex items-center gap-2">
                                     <span className="font-bold text-sm">{u.name}</span>
-                                    <button onClick={() => toggleMasterActive('unit', u)} className={`px-2.5 py-1 text-xs font-bold rounded-lg ${u.active !== false ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{u.active !== false ? '無効化' : '有効化'}</button>
+                                    <button onClick={() => toggleMasterActive('unit', u)} className={`px-2 py-1 text-xs font-bold rounded-lg ${u.active !== false ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}>{u.active !== false ? '無効化' : '有効化'}</button>
+                                    <button onClick={() => deleteMasterItem('unit', u)} className="px-2 py-1 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm">🗑️ 削除</button>
                                   </div>
                                 ))}
                               </div>
@@ -1170,9 +1239,10 @@
                               <h3 className="text-sm font-bold text-slate-800">登録済み管理栄養士一覧</h3>
                               <div className="flex flex-wrap gap-3">
                                 {masterNutritionists.map(n => (
-                                  <div key={n.id} className="p-3 bg-slate-50 rounded-xl border flex items-center gap-3">
+                                  <div key={n.id} className="p-3 bg-slate-50 rounded-xl border flex items-center gap-2">
                                     <span className="font-bold text-sm">{n.name}</span>
-                                    <button onClick={() => toggleMasterActive('nutritionist', n)} className={`px-2.5 py-1 text-xs font-bold rounded-lg ${n.active !== false ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{n.active !== false ? '無効化' : '有効化'}</button>
+                                    <button onClick={() => toggleMasterActive('nutritionist', n)} className={`px-2 py-1 text-xs font-bold rounded-lg ${n.active !== false ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}>{n.active !== false ? '無効化' : '有効化'}</button>
+                                    <button onClick={() => deleteMasterItem('nutritionist', n)} className="px-2 py-1 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm">🗑️ 削除</button>
                                   </div>
                                 ))}
                               </div>
@@ -1203,22 +1273,34 @@
 
           {/* ===== FAX注文票 (実物印刷モーダル) ===== */}
           {showFaxModal && (
-            <div className="fixed inset-0 bg-slate-900 bg-opacity-70 flex items-center justify-center p-4 no-print" style={{zIndex:9000,backdropFilter:'blur(4px)'}}>
-              <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-                <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold text-sm">📠 FAX注文票 印刷プレビューモーダル</span>
-                    <select value={selectedFaxVendorId} onChange={e => setSelectedFaxVendorId(Number(e.target.value))}
-                      className="p-1.5 text-xs font-bold rounded-lg bg-slate-800 text-white border border-slate-700">
-                      {masterVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                    </select>
+            <div className="fixed inset-0 bg-slate-900 bg-opacity-70 flex items-center justify-center p-4 print:p-0 print:bg-white print:static" style={{zIndex:9000,backdropFilter:'blur(4px)'}}>
+              <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden print:max-w-none print:w-full print:shadow-none print:rounded-none print:overflow-visible">
+                <div className="p-4 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 no-print">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="font-bold text-sm">📠 FAX注文票 印刷プレビュー</span>
+                    <div className="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700">
+                      <span className="text-xs text-slate-300 font-bold whitespace-nowrap">業者:</span>
+                      <select value={selectedFaxVendorId} onChange={e => setSelectedFaxVendorId(Number(e.target.value))}
+                        className="p-1 text-xs font-bold rounded bg-slate-900 text-white border-none focus:ring-1 focus:ring-sky-500">
+                        {masterVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700">
+                      <span className="text-xs text-slate-300 font-bold whitespace-nowrap">発注確認者:</span>
+                      <select value={selectedApprover} onChange={e => {
+                        setSelectedApprover(e.target.value);
+                        try { localStorage.setItem('NUTRITION_SELECTED_APPROVER', e.target.value); } catch(err){}
+                      }} className="p-1 text-xs font-bold rounded bg-slate-900 text-white border-none focus:ring-1 focus:ring-sky-500">
+                        {activeNutritionists.map(n => <option key={n.id} value={n.name}>{n.name}</option>)}
+                      </select>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={handlePrintAndApprove} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5">
-                      📄 PDF出力 (印刷) ＆ 承認クリア
+                    <button onClick={() => window.print()} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-all">
+                      📄 PDF出力 (印刷)
                     </button>
-                    <button onClick={() => markFaxSent(selectedFaxVendorId)} className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-xl shadow">
-                      📠 FAX送信済みに変更
+                    <button onClick={() => markFaxSent(selectedFaxVendorId)} className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-xl shadow transition-all">
+                      📠 この業者をFAX送信済みにする
                     </button>
                     <button onClick={() => setShowFaxModal(false)} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-xl">
                       ✕ 閉じる
@@ -1279,9 +1361,9 @@
 
                     <div className="border border-slate-400 p-4 rounded text-xs space-y-1 bg-slate-50">
                       <p className="font-bold text-slate-800">【発注元情報】</p>
-                      <p>特別養護老人ホーム シルクロード七福神</p>
-                      <p>〒899-5431 鹿児島県姶良市西餅田3312</p>
-                      <p>TEL: 0995-67-3311 / FAX: 0995-67-3322</p>
+                      <p className="font-bold">{facilityInfo.name || '特別養護老人ホーム シルクロード七福神'}</p>
+                      <p>{facilityInfo.postal || '〒890-0082'} {facilityInfo.address || '鹿児島県鹿児島市紫原5丁目13-18'}</p>
+                      <p className="font-mono">TEL: {facilityInfo.tel || '099-256-2729'} / FAX: {facilityInfo.fax || '099-256-3729'}</p>
                       <p className="pt-1 font-bold text-slate-900">発注確認者: {selectedApprover} （管理栄養士）</p>
                     </div>
                   </div>

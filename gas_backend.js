@@ -457,6 +457,31 @@ function processData(data, callback) {
     return responseJSON({ success: true, message: 'システム設定を更新しました！' }, callback);
   }
 
+  // Action 6: マスター削除
+  if (data.action === 'deleteMaster') {
+    const targetMaster = data.masterType;
+    const targetId = Number(data.id || (data.item && data.item.id));
+    let sheetName = '';
+    if (targetMaster === 'product') sheetName = '商品マスター';
+    else if (targetMaster === 'vendor') sheetName = '業者マスター';
+    else if (targetMaster === 'unit') sheetName = 'ユニットマスター';
+    else if (targetMaster === 'nutritionist') sheetName = '管理栄養士マスター';
+
+    if (sheetName) {
+      const sheet = ss.getSheetByName(sheetName);
+      if (sheet && sheet.getLastRow() > 1) {
+        const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+        for (let i = rows.length - 1; i >= 0; i--) {
+          if (Number(rows[i][0]) === targetId) {
+            sheet.deleteRow(i + 2);
+            break;
+          }
+        }
+      }
+    }
+    return responseJSON({ success: true, message: `マスター(${targetMaster}:ID${targetId})を削除しました` }, callback);
+  }
+
   return responseJSON({ success: true, message: 'データ処理完了' }, callback);
 }
 
