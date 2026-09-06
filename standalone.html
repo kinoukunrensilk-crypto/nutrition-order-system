@@ -377,7 +377,7 @@
             productId: p.id,
             productName: p.name,
             spec: p.spec || '',
-            productUnit: p.unit || '個',
+            productUnit: getProductDisplayUnit(p),
             vendorId: p.vendorId,
             vendorName: v?.name || '',
             facilityQty: item.facilityQty || 0,
@@ -578,6 +578,19 @@
         }
       };
 
+      // 商品マスターの単位または品名・規格に基づく最適な表示単位の取得
+      const getProductDisplayUnit = (p) => {
+        if (!p) return '個';
+        if (p.unit && p.unit !== '個') return p.unit;
+        const name = (p.name || '').toLowerCase();
+        const spec = (p.spec || '').toLowerCase();
+        if (name.includes('米') || name.includes('こめ') || spec.includes('kg')) {
+          if (spec.includes('袋')) return '袋';
+          return 'kg';
+        }
+        return p.unit || '個';
+      };
+
       // 業者別発注リスト取得 (マスター連動 & 申請中・承認済両対応)
       const getOrdersForVendor = (vendorId) => {
         const list = [];
@@ -588,8 +601,8 @@
           Object.entries(uVal.cart || {}).forEach(([pId, item]) => {
             const p = masterProducts.find(pr => Number(pr.id) === parseInt(pId));
             if (p && Number(p.vendorId) === vId) {
-              if (item.facilityQty > 0) list.push({ name: p.name, spec: p.spec, qty: Number(item.facilityQty), unit: p.unit, note: uKey, unitName: uKey });
-              if (item.personalQty > 0) list.push({ name: p.name, spec: p.spec, qty: Number(item.personalQty), unit: p.unit, note: `${uKey} (${item.personalNames || '個人購入'})`, unitName: uKey });
+              if (item.facilityQty > 0) list.push({ name: p.name, spec: p.spec, qty: Number(item.facilityQty), unit: getProductDisplayUnit(p), note: uKey, unitName: uKey });
+              if (item.personalQty > 0) list.push({ name: p.name, spec: p.spec, qty: Number(item.personalQty), unit: getProductDisplayUnit(p), note: `${uKey} (${item.personalNames || '個人購入'})`, unitName: uKey });
             }
           });
         });
@@ -758,13 +771,12 @@
                                   <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
                                     <span>{product.name}</span>
                                     {product.spec && <span className="text-xs text-slate-400 font-normal">({product.spec})</span>}
-                                    {isRiceOrKg && <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded border border-emerald-300 font-bold">5kg単位</span>}
                                   </h3>
                                   <p className="text-xs text-slate-500 mt-1">発注先: {vendor ? vendor.name : '未設定'}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {isLargeQty && <span className="px-2.5 py-1 text-xs font-bold bg-amber-500 text-white rounded-full">⚠️ 大量発注注意</span>}
-                                  {totalQty > 0 && <span className="px-3.5 py-1 text-xs font-bold bg-sky-600 text-white rounded-full">合計 {totalQty} {product.unit}</span>}
+                                  {totalQty > 0 && <span className="px-3.5 py-1 text-xs font-bold bg-sky-600 text-white rounded-full">合計 {totalQty} {getProductDisplayUnit(product)}</span>}
                                 </div>
                               </div>
                               <div className="mt-4 pt-3 border-t grid grid-cols-2 gap-4">
@@ -830,7 +842,7 @@
                                   return p ? (
                                     <li key={pId} className="text-xs text-slate-800 flex justify-between items-center py-1 border-b border-slate-200">
                                       <span className="font-medium truncate">{p.name}</span>
-                                      <span className="font-bold ml-2 bg-white px-2 py-0.5 rounded border border-slate-300">{it.facilityQty + it.personalQty} {p.unit}</span>
+                                      <span className="font-bold ml-2 bg-white px-2 py-0.5 rounded border border-slate-300">{it.facilityQty + it.personalQty} {getProductDisplayUnit(p)}</span>
                                     </li>
                                   ) : null;
                                 })}
@@ -1133,6 +1145,10 @@
                                           </td>
                                           <td className="p-2.5 text-center">
                                             <div className="flex items-center justify-center gap-1.5">
+                                              <button onClick={() => { setEditingMasterItem(JSON.parse(JSON.stringify(p))); setEditingMasterType('product'); }}
+                                                className="px-2.5 py-1 text-xs font-bold rounded-lg bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 shadow-sm flex items-center gap-0.5">
+                                                ✏️ 編集
+                                              </button>
                                               <button onClick={() => toggleMasterActive('product', p)}
                                                 className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${p.active !== false ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}>
                                                 {p.active !== false ? '無効化' : '有効化'}
@@ -1152,6 +1168,79 @@
                             </div>
                           </div>
                         )}
+
+                        
+                      {/* 商品マスター編集モーダル */}
+                      {editingMasterItem && editingMasterType === 'product' && (
+                        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6 animate-in fade-in zoom-in-95 duration-150">
+                            <div className="flex items-center justify-between border-b pb-3">
+                              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <span>✏️ 商品マスターの編集</span>
+                                <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full font-mono">ID: {editingMasterItem.id}</span>
+                              </h3>
+                              <button onClick={() => { setEditingMasterItem(null); setEditingMasterType(null); }} className="text-slate-400 hover:text-slate-600 text-xl font-bold w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center">✕</button>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="sm:col-span-2">
+                                <label className="text-xs font-bold text-slate-600 block mb-1">商品名 <span className="text-red-500">*</span></label>
+                                <input type="text" value={editingMasterItem.name || ''} onChange={e => setEditingMasterItem(prev => ({ ...prev, name: e.target.value }))}
+                                  className="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-sky-500 outline-none" />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-600 block mb-1">規格・用量</label>
+                                <input type="text" value={editingMasterItem.spec || ''} onChange={e => setEditingMasterItem(prev => ({ ...prev, spec: e.target.value }))} placeholder="例: 10kg, 1kg袋"
+                                  className="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-sky-500 outline-none" />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-600 block mb-1">単位 (kg / 袋 / 個 / 箱 など) <span className="text-red-500">*</span></label>
+                                <input type="text" value={editingMasterItem.unit || ''} onChange={e => setEditingMasterItem(prev => ({ ...prev, unit: e.target.value }))} placeholder="例: kg, 袋, 個"
+                                  className="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold text-sky-700 focus:bg-white focus:ring-2 focus:ring-sky-500 outline-none" />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-600 block mb-1">発注先業者</label>
+                                <select value={editingMasterItem.vendorId} onChange={e => setEditingMasterItem(prev => ({ ...prev, vendorId: Number(e.target.value) }))}
+                                  className="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                  {masterVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-600 block mb-1">商品区分</label>
+                                <select value={editingMasterItem.isToromi ? 'toromi' : 'general'} onChange={e => setEditingMasterItem(prev => ({ ...prev, isToromi: e.target.value === 'toromi' }))}
+                                  className="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                  <option value="general">一般食材・飲料</option>
+                                  <option value="toromi">トロミ材・補助剤</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="bg-slate-50 p-3.5 rounded-2xl border flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-700">有効状態</span>
+                              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+                                <input type="checkbox" checked={editingMasterItem.active !== false} onChange={e => setEditingMasterItem(prev => ({ ...prev, active: e.target.checked }))} className="w-4 h-4 rounded text-sky-600" />
+                                <span>{editingMasterItem.active !== false ? '✅ 有効（発注画面に表示）' : '❌ 無効（非表示）'}</span>
+                              </label>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-2 border-t">
+                              <button onClick={() => { setEditingMasterItem(null); setEditingMasterType(null); }}
+                                className="px-5 py-2.5 border border-slate-300 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-50">
+                                キャンセル
+                              </button>
+                              <button onClick={async () => {
+                                if (!editingMasterItem.name) { alert('商品名を入力してください'); return; }
+                                await saveMasterItem('product', editingMasterItem);
+                                setEditingMasterItem(null);
+                                setEditingMasterType(null);
+                              }}
+                                className="px-6 py-2.5 bg-gradient-to-r from-sky-600 to-blue-600 text-white text-xs font-bold rounded-xl shadow hover:opacity-95">
+                                💾 変更内容を保存
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                         {/* Step 2: 業者マスター */}
                         {settingStep === 2 && (
