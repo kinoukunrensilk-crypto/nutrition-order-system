@@ -1085,10 +1085,22 @@
                     <div className="bg-white rounded-3xl p-5 shadow-sm border border-amber-200/70 flex flex-wrap items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-bold text-slate-700">👩‍⚕️ 管理栄養士 承認担当:</span>
-                        <select value={selectedApprover} onChange={e => setSelectedApprover(e.target.value)}
-                          className="p-2 text-sm font-bold rounded-xl border border-slate-300 bg-white">
-                          {activeNutritionists.map(n => <option key={n.id} value={n.name}>{n.name}</option>)}
-                        </select>
+                        <div className="flex items-center gap-1.5">
+                          <input type="text" value={selectedApprover || ''} onChange={e => {
+                            setSelectedApprover(e.target.value);
+                            try { localStorage.setItem('NUTRITION_SELECTED_APPROVER', e.target.value); } catch(err){}
+                          }} placeholder="担当者氏名を入力" className="p-2 text-sm font-bold rounded-xl border border-slate-300 bg-white shadow-inner w-40 focus:ring-2 focus:ring-sky-500 outline-none" />
+                          <select value="" onChange={e => {
+                            if (e.target.value) {
+                              setSelectedApprover(e.target.value);
+                              try { localStorage.setItem('NUTRITION_SELECTED_APPROVER', e.target.value); } catch(err){}
+                            }
+                          }} className="p-2 text-sm font-bold rounded-xl border border-slate-300 bg-slate-50 hover:bg-slate-100" title="登録済み栄養士から選択">
+                            <option value="">▼ 候補から選択</option>
+                            <option value="(なし・印字しない)">(なし・印字しない)</option>
+                            {activeNutritionists.map(n => <option key={n.id} value={n.name}>{n.name}</option>)}
+                          </select>
+                        </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <button onClick={approveAllOrders}
@@ -1592,12 +1604,19 @@
                         {masterVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                       </select>
                     </div>
-                    <div className="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700">
-                      <span className="text-xs text-slate-300 font-bold whitespace-nowrap">発注確認者:</span>
-                      <select value={selectedApprover} onChange={e => {
+                    <div className="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-700 shadow-inner">
+                      <span className="text-xs text-slate-300 font-bold whitespace-nowrap">✍️ 発注確認者:</span>
+                      <input type="text" value={selectedApprover || ''} onChange={e => {
                         setSelectedApprover(e.target.value);
                         try { localStorage.setItem('NUTRITION_SELECTED_APPROVER', e.target.value); } catch(err){}
-                      }} className="p-1 text-xs font-bold rounded bg-slate-900 text-white border-none focus:ring-1 focus:ring-sky-500">
+                      }} placeholder="担当者氏名を入力" className="w-32 px-2 py-1 text-xs font-bold rounded-lg bg-slate-900 text-white border border-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                      <select value="" onChange={e => {
+                        if (e.target.value) {
+                          setSelectedApprover(e.target.value);
+                          try { localStorage.setItem('NUTRITION_SELECTED_APPROVER', e.target.value); } catch(err){}
+                        }
+                      }} className="p-1 text-xs font-bold rounded-lg bg-slate-700 text-slate-200 border border-slate-600 hover:bg-slate-600 focus:ring-1 focus:ring-sky-500" title="登録済み栄養士から選択">
+                        <option value="">▼ 選択</option>
                         <option value="(なし・印字しない)">(なし・印字しない)</option>
                         {activeNutritionists.map(n => <option key={n.id} value={n.name}>{n.name}</option>)}
                       </select>
@@ -1690,7 +1709,7 @@
                       <p className="font-bold">{facilityInfo.name || '特別養護老人ホーム シルクロード七福神'}</p>
                       <p>{facilityInfo.postal || '〒890-0082'} {facilityInfo.address || '鹿児島県鹿児島市紫原5丁目13-18'}</p>
                       <p className="font-mono">TEL: {facilityInfo.tel || '099-256-2729'} / FAX: {facilityInfo.fax || '099-256-3729'}</p>
-                      {selectedApprover && selectedApprover !== '(なし・印字しない)' ? (
+                      {selectedApprover && selectedApprover.trim() !== '' && selectedApprover !== '(なし・印字しない)' ? (
                         <p className="pt-1 font-bold text-slate-900">発注確認者: {selectedApprover} （管理栄養士）</p>
                       ) : null}
                     </div>
