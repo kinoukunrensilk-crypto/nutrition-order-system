@@ -125,6 +125,20 @@
         return `${y}/${m}/${day} (${week}) ${hh}:${mm}`;
       };
 
+      
+      const formatDeadlineTime = (val) => {
+        if (!val) return '14:00';
+        if (typeof val === 'string' && val.includes('T')) {
+          const d = new Date(val);
+          if (!isNaN(d.getTime())) {
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            return `${hh}:${mm}`;
+          }
+        }
+        return String(val);
+      };
+    
       const formatDateOnly = (dateVal) => {
         if (!dateVal) return '';
         const d = parseDateSafe(dateVal);
@@ -734,7 +748,7 @@
       const isAfterDeadline = () => {
         const now = new Date();
         const currentHM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        return currentHM > (systemSettings.deadlineTime || '14:00');
+        return currentHM > formatDeadlineTime(systemSettings.deadlineTime);
       };
 
       // CSVエクスポート (F15: RFC 4180準拠エスケープ)
@@ -1096,7 +1110,7 @@
                         <div className="flex items-center gap-3">
                           <span className="text-2xl">⏰</span>
                           <div>
-                            <h3 className="text-sm font-bold">【締切時刻オーバー注意】本日の受付締切 ({systemSettings.deadlineTime || '14:00'}) を過ぎています</h3>
+                            <h3 className="text-sm font-bold">【締切時刻オーバー注意】本日の受付締切 ({formatDeadlineTime(systemSettings.deadlineTime)}) を過ぎています</h3>
                             <p className="text-xs text-amber-100 mt-0.5">今送信される発注は管理栄養士の取りまとめ完了後となるため、次回発送分（翌営業日扱い）となります。</p>
                           </div>
                         </div>
@@ -1244,7 +1258,7 @@
                         <div className="flex items-center gap-2">
                           <span className="text-lg">🏢</span>
                           <h3 className="text-sm font-bold text-slate-800">全ユニット発注提出状況</h3>
-                          <span className="text-xs text-slate-500 font-normal">（本日締切: {systemSettings.deadlineTime || '14:00'}）</span>
+                          <span className="text-xs text-slate-500 font-normal">（本日締切: {formatDeadlineTime(systemSettings.deadlineTime)}）</span>
                         </div>
                         <div className="flex items-center gap-3 text-xs font-bold">
                           <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
