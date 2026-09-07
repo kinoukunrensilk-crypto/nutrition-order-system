@@ -163,6 +163,8 @@
       const [showFaxModal, setShowFaxModal] = useState(false);
       const [faxStatus, setFaxStatus] = useState('preview');
       const [selectedFaxVendorId, setSelectedFaxVendorId] = useState(1);
+      const [faxFilterMode, setFaxFilterMode] = useState('unfaxed'); // 'unfaxed': 今回未送信分のみ, 'all': 全期間・全履歴, 'faxed': 送信済み過去履歴のみ
+      const [faxDateFilter, setFaxDateFilter] = useState('ALL'); // 送信日・申請日絞り込み
       const [toastMessage, setToastMessage] = useState(null);
       const toastTimerRef = useRef(null);
       const [expandedHistoryId, setExpandedHistoryId] = useState(null);
@@ -750,53 +752,74 @@
         return rawUnit || '個';
       };
 
-      // 業者別発注リスト取得 (F1: 選択業者のみ抽出 & F4: PII保護マスキング)
-      const getOrdersForVendor = (vendorId) => {
+      // 業者別発注リスト取得 (F1: 選択業者のみ抽出 & 過去FAX送信済み履歴参照対応)
+      const getOrdersForVendor = (vendorId, filterMode = faxFilterMode, dateFilter = faxDateFilter) => {
         const list = [];
         const vId = Number(vendorId);
 
-        // カート内 (未送信)
-        Object.entries(unitData).forEach(([uKey, uVal]) => {
-          Object.entries(uVal.cart || {}).forEach(([pId, item]) => {
-            const p = masterProducts.find(pr => Number(pr.id) === parseInt(pId));
-            if (p && Number(p.vendorId) === vId) {
-              if (item.facilityQty > 0) {
-                list.push({
-                  name: p.name,
-                  spec: p.spec,
-                  qty: Number(item.facilityQty),
-                  unit: getProductDisplayUnit(p),
-                  note: uKey,
-                  unitName: uKey,
-                  isPersonal: false,
-                  personalNames: ''
-                });
+        // カート内 (未送信): 'unfaxed' または 'all' の場合のみ含める
+        if (filterMode !== 'faxed') {
+          Object.entries(unitData).forEach(([uKey, uVal]) => {
+            Object.entries(uVal.cart || {}).forEach(([pId, item]) => {
+              const p = masterProducts.find(pr => Number(pr.id) === parseInt(pId));
+              if (p && Number(p.vendorId) === vId) {
+                if (item.facilityQty > 0) {
+                  list.push({
+                    name: p.name,
+                    spec: p.spec,
+                    qty: Number(item.facilityQty),
+                    unit: getProductDisplayUnit(p),
+                    note: uKey,
+                    unitName: uKey,
+                    isPersonal: false,
+                    personalNames: '',
+                    status: '未送信(カート)',
+                    sentDate: ''
+                  });
+                }
+                if (item.personalQty > 0) {
+                  list.push({
+                    name: p.name,
+                    spec: p.spec,
+                    qty: Number(item.personalQty),
+                    unit: getProductDisplayUnit(p),
+                    note: maskResidentNamesInFax ? `${uKey} (個人分)` : `${uKey} (${item.personalNames || '個人購入'})`,
+                    unitName: uKey,
+                    isPersonal: true,
+                    personalNames: item.personalNames || '',
+                    status: '未送信(カート)',
+                    sentDate: ''
+                  });
+                }
               }
-              if (item.personalQty > 0) {
-                list.push({
-                  name: p.name,
-                  spec: p.spec,
-                  qty: Number(item.personalQty),
-                  unit: getProductDisplayUnit(p),
-                  // F4: 外部FAX注文書では入居者実名をマスクして [ユニット名] (個人分) と印字
-                  note: maskResidentNamesInFax ? `${uKey} (個人分)` : `${uKey} (${item.personalNames || '個人購入'})`,
-                  unitName: uKey,
-                  isPersonal: true,
-                  personalNames: item.personalNames || ''
-                });
-              }
-            }
+            });
           });
-        });
+        }
 
-        // 履歴データ (該当業者かつ、まだFAX送信済になっていない明細を抽出 - F1)
+        // 履歴データから抽出
         orderHistory.forEach(entry => {
+          const entryDate = (entry.submittedAt || '').split(' ')[0] || (entry.faxSentAt || '').split(' ')[0] || '';
+          if (dateFilter !== 'ALL' && entryDate !== dateFilter) return;
+
           (entry.items || []).forEach(item => {
             const prod = masterProducts.find(pr => Number(pr.id) === Number(item.productId));
             const itemVendorId = Number(item.vendorId) || (prod ? Number(prod.vendorId) : 0);
             const itemStatus = item.status || entry.status;
-            if (itemVendorId === vId && itemStatus !== 'FAX送信済') {
+
+            // filterMode に応じた判定
+            // 'unfaxed': まだFAX送信済になっていない明細 (申請中・承認済)
+            // 'faxed': FAX送信済みの過去明細のみ
+            // 'all': 全て
+            let matchStatus = false;
+            // 未送信抽出モード時はFAX送信済を除外
+            const isTargetVendor = itemVendorId === vId;
+            const isUnfaxed = itemVendorId === vId && itemStatus !== 'FAX送信済';
+            const isFaxed = itemVendorId === vId && itemStatus === 'FAX送信済';
+            const matchStatus = filterMode === 'faxed' ? isFaxed : (filterMode === 'all' ? isTargetVendor : isUnfaxed);
+
+            if (matchStatus) {
               const uKey = entry.unit;
+              const faxDate = item.faxSentAt || entry.faxSentAt || entry.submittedAt || '';
               if (item.facilityQty > 0) {
                 list.push({
                   name: item.productName,
@@ -806,7 +829,9 @@
                   note: uKey,
                   unitName: uKey,
                   isPersonal: false,
-                  personalNames: ''
+                  personalNames: '',
+                  status: itemStatus,
+                  sentDate: faxDate
                 });
               }
               if (item.personalQty > 0) {
@@ -815,11 +840,12 @@
                   spec: item.spec,
                   qty: Number(item.personalQty),
                   unit: getProductDisplayUnit(item),
-                  // F4: 外部FAX注文書では入居者実名をマスクして [ユニット名] (個人分) と印字
                   note: maskResidentNamesInFax ? `${uKey} (個人分)` : `${uKey} (${item.personalNames || '個人購入'})`,
                   unitName: uKey,
                   isPersonal: true,
-                  personalNames: item.personalNames || ''
+                  personalNames: item.personalNames || '',
+                  status: itemStatus,
+                  sentDate: faxDate
                 });
               }
             }
@@ -827,6 +853,14 @@
         });
         return list;
       };
+
+      // 過去のFAX送信日・申請日の一覧をユニーク抽出
+      const availableFaxDates = [...new Set(
+        orderHistory.flatMap(e => [
+          (e.faxSentAt || '').split(' ')[0],
+          (e.submittedAt || '').split(' ')[0]
+        ]).filter(Boolean)
+      )].sort().reverse();
 
       const currentFaxVendor = masterVendors.find(v => v.id === selectedFaxVendorId) || masterVendors[0] || FALLBACK_VENDORS[0];
       const currentFaxOrders = getOrdersForVendor(selectedFaxVendorId);
@@ -1178,7 +1212,21 @@
                               </div>
                             )}
                             <div className="overflow-x-auto">
-                              <table className="w-full text-left text-xs bg-white rounded-xl border">
+                              <div className="flex items-center justify-between pb-1">
+                                    <span className="font-bold text-slate-600">発注明細一覧</span>
+                                    <button onClick={() => {
+                                      const firstItem = entry.items && entry.items[0];
+                                      if (firstItem && firstItem.vendorId) {
+                                        setSelectedFaxVendorId(Number(firstItem.vendorId));
+                                      }
+                                      setFaxFilterMode('all');
+                                      setFaxDateFilter((entry.submittedAt || '').split(' ')[0] || 'ALL');
+                                      setShowFaxModal(true);
+                                    }} className="px-3 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-300 font-bold text-xs rounded-lg shadow-xs flex items-center gap-1 transition-all">
+                                      📠 この発注のFAX注文票（PDF）を再表示
+                                    </button>
+                                  </div>
+                                  <table className="w-full text-left text-xs bg-white rounded-xl border">
                                 <thead><tr className="bg-slate-100 font-bold text-slate-700 border-b"><th className="p-2.5">商品名</th><th className="p-2.5 text-center">施設分</th><th className="p-2.5 text-center">個人分</th><th className="p-2.5">FAX備考</th><th className="p-2.5">振分先業者</th></tr></thead>
                                 <tbody className="divide-y divide-slate-100">
                                   {(entry.items || []).map((it, idx) => (
@@ -1639,6 +1687,25 @@
                         {masterVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                       </select>
                     </div>
+                    <div className="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                      <span className="text-xs text-slate-300 font-bold whitespace-nowrap">📋 表示対象:</span>
+                      <select value={faxFilterMode} onChange={e => setFaxFilterMode(e.target.value)}
+                        className="p-1 text-xs font-bold rounded bg-slate-900 text-sky-300 border-none focus:ring-1 focus:ring-sky-500">
+                        <option value="unfaxed">🟡 今回の未送信分のみ</option>
+                        <option value="faxed">📠 過去のFAX送信済み分</option>
+                        <option value="all">🌐 全期間・全発注</option>
+                      </select>
+                    </div>
+                    {availableFaxDates.length > 0 && (
+                      <div className="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700">
+                        <span className="text-xs text-slate-300 font-bold whitespace-nowrap">📅 日付:</span>
+                        <select value={faxDateFilter} onChange={e => setFaxDateFilter(e.target.value)}
+                          className="p-1 text-xs font-bold rounded bg-slate-900 text-white border-none focus:ring-1 focus:ring-sky-500">
+                          <option value="ALL">全日程</option>
+                          {availableFaxDates.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                    )}
                     <div className="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-700 shadow-inner">
                       <span className="text-xs text-slate-300 font-bold whitespace-nowrap">✍️ 発注確認者:</span>
                       <input type="text" value={selectedApprover || ''} onChange={e => {
@@ -1683,7 +1750,12 @@
                         <p className="text-xs text-slate-600 mt-1">FAX番号: <span className="font-bold font-mono text-sm">{currentFaxVendor.fax}</span>（ご担当: {currentFaxVendor.contact}）</p>
                       </div>
                       <div className="text-right">
-                        <h1 className="text-lg font-bold tracking-widest text-slate-900">発 注 書</h1>
+                        <div className="flex items-center justify-end gap-2">
+                          <h1 className="text-lg font-bold tracking-widest text-slate-900">発 注 書</h1>
+                          {faxFilterMode === 'faxed' && (
+                            <span className="px-2 py-0.5 text-[11px] font-bold bg-slate-800 text-white rounded border border-slate-700 no-print">過去送信控え</span>
+                          )}
+                        </div>
                         <p className="text-xs text-slate-600">特別養護老人ホーム シルクロード七福神</p>
                       </div>
                     </div>
