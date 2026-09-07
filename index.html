@@ -919,6 +919,38 @@
       const activeNutritionists = masterNutritionists.filter(n => n.active !== false);
       const activeVendors = masterVendors.filter(v => v.active !== false);
 
+      
+      // 管理栄養士 承認・FAX選択用ヘルパー
+      const pendingOrders = orderHistory.filter(h => h.status === '申請中');
+      const approvedOrders = orderHistory.filter(h => h.status === '承認済');
+
+      const toggleSelectApproved = (id) => {
+        setSelectedApprovedIds(prev =>
+          prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+        );
+      };
+
+      const selectAllApproved = () => {
+        if (selectedApprovedIds.length === approvedOrders.length) {
+          setSelectedApprovedIds([]);
+        } else {
+          setSelectedApprovedIds(approvedOrders.map(o => o.id));
+        }
+      };
+
+      const openFaxModalForSelected = () => {
+        const targets = selectedApprovedIds.length > 0 ? selectedApprovedIds : approvedOrders.map(o => o.id);
+        if (targets.length === 0) {
+          alert('FAX注文書を作成する「承認済」発注を選択してください。');
+          return;
+        }
+        setFaxTargetEntryIds(targets);
+        setFaxFilterMode('all');
+        setFaxDateFilter('ALL');
+        setShowFaxModal(true);
+        setFaxStatus('preview');
+      };
+  
       const navTabs = [
         { key: 'staff',        label: '🏢 ユニット発注' },
         { key: 'nutritionist', label: '👩‍⚕️ 承認 & PDF' },
