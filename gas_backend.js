@@ -502,6 +502,28 @@ function processData(data, callback) {
     return responseJSON({ success: true, message: `マスター(${targetMaster}:ID${targetId})を削除しました` }, callback);
   }
 
+  
+  // Action 7: 発注履歴の全クリア・特定発注の削除 (clearOrderHistory)
+  if (data.action === 'clearOrderHistory' || data.action === 'clearHistory') {
+    const orderSheet = ss.getSheetByName('発注データ');
+    if (orderSheet && orderSheet.getLastRow() > 1) {
+      if (data.orderId) {
+        // 特定の発注IDのみ削除
+        const targetOrderId = String(data.orderId);
+        const rows = orderSheet.getRange(2, 1, orderSheet.getLastRow() - 1, 1).getValues();
+        for (let i = rows.length - 1; i >= 0; i--) {
+          if (String(rows[i][0]) === targetOrderId) {
+            orderSheet.deleteRow(i + 2);
+          }
+        }
+      } else {
+        // ヘッダー行(1行目)を残して全削除
+        orderSheet.deleteRows(2, orderSheet.getLastRow() - 1);
+      }
+    }
+    return responseJSON({ success: true, message: 'スプレッドシートの発注履歴をクリアしました！' }, callback);
+  }
+
   return responseJSON({ success: true, message: 'データ処理完了' }, callback);
 }
 

@@ -306,8 +306,25 @@
               if (data.units && data.units.length > 0) setMasterUnits(data.units);
               if (data.nutritionists && data.nutritionists.length > 0) setMasterNutritionists(data.nutritionists);
               if (data.settings) setSystemSettings(prev => ({ ...prev, ...data.settings }));
+              
               if (data.orderHistory) {
-                const sanitizedHistory = data.orderHistory.map(entry => ({
+                // 履歴クリア日時および個別削除IDによるフィルタリングガード
+                const clearedAtStr = localStorage.getItem('NUTRITION_HISTORY_CLEARED_AT');
+                const clearedAtTime = clearedAtStr ? new Date(clearedAtStr).getTime() : 0;
+                let deletedIds = [];
+                try { deletedIds = JSON.parse(localStorage.getItem('NUTRITION_DELETED_ORDER_IDS') || '[]'); } catch(e){}
+
+                const filteredRemote = data.orderHistory.filter(entry => {
+                  if (deletedIds.includes(entry.id)) return false;
+                  if (clearedAtTime > 0) {
+                    const entryTime = entry.submittedAt ? new Date(entry.submittedAt).getTime() : 0;
+                    if (entryTime > 0 && entryTime <= clearedAtTime) return false;
+                  }
+                  return true;
+                });
+
+                const sanitizedHistory = filteredRemote.map(entry => ({
+    
                   ...entry,
                   items: (entry.items || []).map(it => {
                     const name = (it.productName || it.name || '').toLowerCase();
@@ -772,10 +789,46 @@
         showToast('📥 発注履歴のCSVファイルをダウンロードしました！');
       };
 
-      const handleClearHistory = () => {
-        if (confirm('発注履歴をすべてクリアしますか？')) {
-          setOrderHistory([]); try { localStorage.removeItem('NUTRITION_ORDER_HISTORY'); } catch {}
-          showToast('発注履歴をクリアしました。');
+      const handleClearHistory = async () => {
+        if (confirm('発注履歴をすべてクリアしますか？\n※スプレッドシート上の「発注データ」もすべて消去され、再ログイン後も完全にリセットされます。')) {
+          const nowIso = new Date().toISOString();
+          try {
+            localStorage.setItem('NUTRITION_HISTORY_CLEARED_AT', nowIso);
+            localStorage.removeItem('NUTRITION_ORDER_HISTORY');
+            localStorage.removeItem('NUTRITION_DELETED_ORDER_IDS');
+          } catch(e) {}
+          setOrderHistory([]);
+          showToast('🗑️ 発注履歴をクリアしました。スプレッドシートを更新中...');
+
+          try {
+            await postToGAS({ action: 'clearOrderHistory' });
+            showToast('✅ スプレッドシートの発注履歴も完全に消去されました！');
+          } catch(err) {
+            console.warn('GASへの発注履歴クリア通信がタイムアウトまたはオフラインです:', err);
+          }
+        }
+      };
+
+      // 個別発注の削除
+      const handleDeleteSingleHistory = async (entryId) => {
+        if (!confirm('この発注履歴を削除しますか？\n※スプレッドシート上の該当発注データも消去されます。')) return;
+
+        try {
+          let deletedIds = [];
+          try { deletedIds = JSON.parse(localStorage.getItem('NUTRITION_DELETED_ORDER_IDS') || '[]'); } catch(e){}
+          if (!deletedIds.includes(entryId)) {
+            deletedIds.push(entryId);
+            localStorage.setItem('NUTRITION_DELETED_ORDER_IDS', JSON.stringify(deletedIds));
+          }
+        } catch(e){}
+
+        setOrderHistory(prev => prev.filter(e => e.id !== entryId));
+        showToast('🗑️ 発注履歴を1件削除しました。');
+
+        try {
+          await postToGAS({ action: 'clearOrderHistory', orderId: entryId });
+        } catch(err) {
+          console.warn('GASへの個別発注削除通信エラー:', err);
         }
       };
 
