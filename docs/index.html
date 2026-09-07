@@ -810,8 +810,6 @@
             // 'unfaxed': まだFAX送信済になっていない明細 (申請中・承認済)
             // 'faxed': FAX送信済みの過去明細のみ
             // 'all': 全て
-            let matchStatus = false;
-            // 未送信抽出モード時はFAX送信済を除外
             const isTargetVendor = itemVendorId === vId;
             const isUnfaxed = itemVendorId === vId && itemStatus !== 'FAX送信済';
             const isFaxed = itemVendorId === vId && itemStatus === 'FAX送信済';
