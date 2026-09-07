@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
@@ -23,22 +23,61 @@
   <style>
     body { font-family: 'Noto Sans JP', 'Inter', sans-serif; }
     @media print {
-      body * { visibility: hidden !important; }
-      #fax-print-area, #fax-print-area * { visibility: visible !important; }
-      #fax-print-area {
-        position: fixed !important;
-        left: 0 !important;
-        top: 0 !important;
-        width: 100% !important;
+      html, body {
         margin: 0 !important;
-        padding: 8mm 12mm !important;
+        padding: 0 !important;
         background: #fff !important;
-        font-size: 11pt !important;
+        height: auto !important;
+        overflow: visible !important;
+      }
+      body > *:not(#root) {
+        display: none !important;
+      }
+      .no-print, .no-print * {
+        display: none !important;
+      }
+      #fax-modal-backdrop, #fax-modal-container {
+        position: static !important;
+        display: block !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: transparent !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
         box-shadow: none !important;
         border: none !important;
+        overflow: visible !important;
+        max-height: none !important;
+        max-width: none !important;
+        width: 100% !important;
+        height: auto !important;
       }
-      .no-print, .no-print * { display: none !important; }
-      @page { size: A4 portrait; margin: 8mm; }
+      #fax-print-area {
+        position: static !important;
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 4mm 6mm !important;
+        background: #fff !important;
+        box-shadow: none !important;
+        border: none !important;
+        page-break-inside: avoid;
+        break-inside: avoid;
+        font-size: 10.5pt !important;
+      }
+      #fax-print-area table {
+        page-break-inside: auto;
+        break-inside: auto;
+      }
+      #fax-print-area tr {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      @page {
+        size: A4 portrait;
+        margin: 8mm;
+      }
     }
   </style>
 </head>
@@ -103,6 +142,8 @@
       const [role, setRole] = useState('staff');
       const [settingStep, setSettingStep] = useState(1);
       const [currentUnit, setCurrentUnit] = useState('2W');
+      const [isSubmitting, setIsSubmitting] = useState(false);
+      const [maskResidentNamesInFax, setMaskResidentNamesInFax] = useState(true);
       const [selectedApprover, setSelectedApprover] = useState(() => {
         return localStorage.getItem('NUTRITION_SELECTED_APPROVER') || '野元 史彦';
       });
@@ -282,6 +323,12 @@
         });
       };
 
+      // ===== ユーティリティ: 全角数字の半角正規化 (F7) =====
+      const toHalfWidth = (str) => {
+        if (str === null || str === undefined) return '';
+        return String(str).replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+      };
+
       // ===== カート操作 (1単位増減 & キーボード直接数値入力対応) =====
       const currentUnitState = unitData[currentUnit] || { cart: {}, memo: '', staffName: '', submittedAt: '' };
 
@@ -292,49 +339,62 @@
           const currentVal = Number(currentItem[field]) || 0;
           const nextQty = Math.max(0, currentVal + delta);
           const updatedItem = { ...currentItem, [field]: nextQty };
-          const newCart = { ...unitInfo.cart };
-          if (updatedItem.facilityQty === 0 && updatedItem.personalQty === 0) { delete newCart[productId]; }
-          else { newCart[productId] = updatedItem; }
+          // 数量が0になっても個人名メモを保護するためカート内オブジェクトを保持 (F6)
+          const newCart = { ...unitInfo.cart, [productId]: updatedItem };
           return { ...prev, [currentUnit]: { ...unitInfo, cart: newCart } };
         });
       };
 
       const setItemQtyDirect = (productId, field, val) => {
-        const num = val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0);
+        const normalized = toHalfWidth(val).trim();
+        const num = normalized === '' ? 0 : Math.max(0, parseInt(normalized, 10) || 0);
         setUnitData(prev => {
           const unitInfo = prev[currentUnit] || { cart: {}, memo: '', staffName: '' };
           const currentItem = unitInfo.cart[productId] || { facilityQty: 0, personalQty: 0, personalNames: '' };
           const updatedItem = { ...currentItem, [field]: num };
-          const newCart = { ...unitInfo.cart };
-          if (updatedItem.facilityQty === 0 && updatedItem.personalQty === 0) { delete newCart[productId]; }
-          else { newCart[productId] = updatedItem; }
+          // 数量が0になっても個人名メモを保護するためカート内オブジェクトを保持 (F6, F7)
+          const newCart = { ...unitInfo.cart, [productId]: updatedItem };
           return { ...prev, [currentUnit]: { ...unitInfo, cart: newCart } };
         });
       };
 
-      // 前回の発注内容を呼び出す
+      // 前回の発注内容を呼び出す (F10: 重複加算防止 & 上書き確認)
       const copyLastOrderForUnit = () => {
         const lastEntry = orderHistory.find(h => h.unit === currentUnit);
         if (!lastEntry || !lastEntry.items || lastEntry.items.length === 0) {
           showToast(`⚠️ ${currentUnit}ユニットの過去の発注履歴が見つかりません。`);
           return;
         }
-        setUnitData(prev => {
-          const unitInfo = prev[currentUnit] || { cart: {}, memo: '', staffName: '' };
-          const newCart = { ...unitInfo.cart };
-          lastEntry.items.forEach(it => {
-            const p = masterProducts.find(pr => pr.name === it.productName || pr.id === it.productId);
-            if (p) {
-              const existing = newCart[p.id] || { facilityQty: 0, personalQty: 0, personalNames: '' };
-              newCart[p.id] = {
-                facilityQty: existing.facilityQty + (it.facilityQty || 0),
-                personalQty: existing.personalQty + (it.personalQty || 0),
-                personalNames: existing.personalNames || it.personalNames || ''
-              };
-            }
-          });
-          return { ...prev, [currentUnit]: { ...unitInfo, cart: newCart, staffName: unitInfo.staffName || lastEntry.staffName || '' } };
+
+        const currentUnitInfo = unitData[currentUnit] || { cart: {}, memo: '', staffName: '' };
+        const existingCartCount = Object.values(currentUnitInfo.cart || {}).filter(it => (it.facilityQty || 0) + (it.personalQty || 0) > 0).length;
+        if (existingCartCount > 0) {
+          if (!window.confirm(`現在【${currentUnit}】のカートに ${existingCartCount} 件の商品が入っています。\n前回の発注内容で現在のカートを上書き（置き換え）しますか？`)) {
+            return;
+          }
+        }
+
+        // 上書き（置換）処理で重複加算を完全防止
+        const newCart = {};
+        lastEntry.items.forEach(it => {
+          const p = masterProducts.find(pr => pr.name === it.productName || pr.id === it.productId);
+          if (p) {
+            newCart[p.id] = {
+              facilityQty: it.facilityQty || 0,
+              personalQty: it.personalQty || 0,
+              personalNames: it.personalNames || ''
+            };
+          }
         });
+
+        setUnitData(prev => ({
+          ...prev,
+          [currentUnit]: {
+            ...currentUnitInfo,
+            cart: newCart,
+            staffName: currentUnitInfo.staffName || lastEntry.staffName || ''
+          }
+        }));
         showToast(`📋 ${currentUnit}ユニットの前回の発注内容を呼び出しました！`);
       };
 
@@ -350,75 +410,98 @@
 
       // ===== 発注送信 (スプレッドシート正本登録) =====
       const handleSubmitOrder = async () => {
+        if (isSubmitting) return; // F3: 二重送信ガード
+
         const cart = unitData[currentUnit]?.cart || {};
-        const items = Object.entries(cart).filter(([_, it]) => it.facilityQty + it.personalQty > 0);
+        const items = Object.entries(cart).filter(([_, it]) => (it.facilityQty || 0) + (it.personalQty || 0) > 0);
         if (items.length === 0) { showToast('⚠️ カートに商品がありません。'); return; }
-        const staffName = unitData[currentUnit]?.staffName || '';
+        const staffName = (unitData[currentUnit]?.staffName || '').trim();
         const memo = unitData[currentUnit]?.memo || '';
-        if (!staffName.trim()) { showToast('⚠️ 発注担当者名を入力してください。'); return; }
-        const now = getNowJST();
+        if (!staffName) { showToast('⚠️ 発注担当者名を入力してください。'); return; }
 
-        const flatItems = [];
-        const orderId = 'ORD-' + Date.now();
-        const requestId = 'REQ-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-        const currentUnitObj = masterUnits.find(u => u.name === currentUnit);
+        // F9: 発注送信前確認ダイアログ
+        const confirmMsg = `【${currentUnit}】の発注を送信しますか？（合計 ${items.length} 品目）`;
+        if (!window.confirm(confirmMsg)) {
+          return;
+        }
 
-        items.forEach(([pId, item]) => {
-          const p = masterProducts.find(pr => pr.id === parseInt(pId));
-          if (!p) return;
-          const v = masterVendors.find(ven => ven.id === p.vendorId);
+        setIsSubmitting(true);
+        try {
+          const now = getNowJST();
+          const flatItems = [];
+          const orderId = 'ORD-' + Date.now();
+          const requestId = 'REQ-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+          const currentUnitObj = masterUnits.find(u => u.name === currentUnit);
 
-          flatItems.push({
-            orderId,
-            time: now,
+          items.forEach(([pId, item]) => {
+            const p = masterProducts.find(pr => pr.id === parseInt(pId));
+            if (!p) return;
+            const v = masterVendors.find(ven => ven.id === p.vendorId);
+
+            flatItems.push({
+              orderId,
+              time: now,
+              unitId: currentUnitObj?.id || 0,
+              unit: currentUnit,
+              staffName,
+              productId: p.id,
+              productName: p.name,
+              spec: p.spec || '',
+              productUnit: getProductDisplayUnit(p),
+              vendorId: p.vendorId,
+              vendorName: v?.name || '',
+              facilityQty: item.facilityQty || 0,
+              personalQty: item.personalQty || 0,
+              personalNames: item.personalNames || '',
+              note: item.personalQty > 0 ? `${currentUnit} (${item.personalNames || '個人購入'})` : currentUnit,
+              memo,
+              status: '申請中'
+            });
+          });
+
+          const newEntry = {
+            id: orderId,
+            submittedAt: now,
             unitId: currentUnitObj?.id || 0,
             unit: currentUnit,
             staffName,
-            productId: p.id,
-            productName: p.name,
-            spec: p.spec || '',
-            productUnit: getProductDisplayUnit(p),
-            vendorId: p.vendorId,
-            vendorName: v?.name || '',
-            facilityQty: item.facilityQty || 0,
-            personalQty: item.personalQty || 0,
-            personalNames: item.personalNames || '',
-            note: item.personalQty > 0 ? `${currentUnit} (${item.personalNames || '個人購入'})` : currentUnit,
-            memo
-          });
-        });
+            memo,
+            items: flatItems,
+            status: '申請中'
+          };
 
-        const newEntry = {
-          id: orderId,
-          submittedAt: now,
-          unitId: currentUnitObj?.id || 0,
-          unit: currentUnit,
-          staffName,
-          memo,
-          items: flatItems,
-          status: '申請中'
-        };
+          const updatedHistory = [newEntry, ...orderHistory];
+          setOrderHistory(updatedHistory);
+          try { localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(updatedHistory)); } catch {}
 
-        const updatedHistory = [newEntry, ...orderHistory];
-        setOrderHistory(updatedHistory);
-        try { localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(updatedHistory)); } catch {}
+          // GAS POST送信
+          await postToGAS({ action: 'bulkSubmit', items: flatItems, orderId, requestId });
 
-        // GAS POST送信
-        await postToGAS({ action: 'bulkSubmit', items: flatItems, orderId, requestId });
+          // カートクリア
+          setUnitData(prev => ({ ...prev, [currentUnit]: { cart: {}, memo: '', staffName: '', submittedAt: '' } }));
 
-        // カートクリア
-        setUnitData(prev => ({ ...prev, [currentUnit]: { cart: {}, memo: '', staffName: '', submittedAt: '' } }));
-
-        setSubmissionSuccessInfo({ unit: currentUnit, count: flatItems.length, staff: staffName });
-        setTimeout(() => setSubmissionSuccessInfo(null), 5000);
+          setSubmissionSuccessInfo({ unit: currentUnit, count: flatItems.length, staff: staffName });
+          setTimeout(() => setSubmissionSuccessInfo(null), 5000);
+        } catch (err) {
+          console.error('発注送信エラー:', err);
+          showToast('❌ 発注送信中にエラーが発生しました');
+        } finally {
+          setIsSubmitting(false);
+        }
       };
 
       // ===== ステータス更新ヘルパー (承認 / FAX送信済) =====
       const updateOrderStatusInGAS = async (orderId, newStatus, senderName) => {
         const updated = orderHistory.map(entry => {
           if (entry.id === orderId || orderId === 'ALL_PENDING') {
+            const newItems = (entry.items || []).map(it => ({
+              ...it,
+              status: newStatus,
+              ...(newStatus === 'FAX送信済' ? { faxSentAt: getNowJST(), faxSender: senderName } : {})
+            }));
             return {
               ...entry,
+              items: newItems,
               status: newStatus,
               approver: senderName,
               approvedAt: getNowJST(),
@@ -454,10 +537,45 @@
         }
       };
 
-      // FAX送信済みに変更
-      const markFaxSent = (vendorId) => {
-        updateOrderStatusInGAS('ALL_PENDING', 'FAX送信済', selectedApprover);
-        showToast('📠 FAX送信済みに変更し、送信履歴を保存しました！');
+      // FAX送信済みに変更 (F1: 該当業者のみステータスをFAX送信済に更新)
+      const markFaxSent = async (vendorId) => {
+        const vId = Number(vendorId);
+        const now = getNowJST();
+
+        const updated = orderHistory.map(entry => {
+          let hasVendorItem = false;
+          const newItems = (entry.items || []).map(it => {
+            const prod = masterProducts.find(pr => Number(pr.id) === Number(it.productId));
+            const itVendorId = Number(it.vendorId) || (prod ? Number(prod.vendorId) : 0);
+            if (itVendorId === vId) {
+              hasVendorItem = true;
+              return { ...it, status: 'FAX送信済', faxSentAt: now, faxSender: selectedApprover };
+            }
+            return it;
+          });
+
+          if (!hasVendorItem) return entry;
+
+          const allFaxed = newItems.length > 0 && newItems.every(it => it.status === 'FAX送信済');
+          return {
+            ...entry,
+            items: newItems,
+            status: allFaxed ? 'FAX送信済' : (entry.status === '申請中' ? '承認済' : entry.status),
+            faxSentAt: now,
+            faxSender: selectedApprover
+          };
+        });
+
+        setOrderHistory(updated);
+        try { localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(updated)); } catch {}
+
+        await postToGAS({
+          action: 'updateOrderStatusByVendor',
+          vendorId: vId,
+          status: 'FAX送信済',
+          sender: selectedApprover
+        });
+        showToast('📠 この業者の発注をFAX送信済みに更新し、履歴を保存しました！');
       };
 
       // ===== マスター操作 (CRUD & 有効無効切り替え) =====
@@ -525,34 +643,40 @@
         return currentHM > (systemSettings.deadlineTime || '14:00');
       };
 
-      // CSVエクスポート
+      // CSVエクスポート (F15: RFC 4180準拠エスケープ)
       const exportHistoryToCSV = () => {
         if (orderHistory.length === 0) {
           showToast('⚠️ 発注履歴がありません。');
           return;
         }
 
+        const escapeCSV = (str) => {
+          if (str === null || str === undefined) return '""';
+          const s = String(str).replace(/"/g, '""');
+          return `"${s}"`;
+        };
+
         const headers = ['発注ID', '送信日時', 'ステータス', 'ユニット名', '発注担当者', '商品名', '規格', '単位', '業者名', '施設分数量', '個人分数量', 'FAX印字備考', '申送りメモ', '承認者', 'FAX送信日時'];
-        const rows = [headers];
+        const rows = [headers.map(h => escapeCSV(h))];
 
         orderHistory.forEach(entry => {
           (entry.items || []).forEach(item => {
             rows.push([
-              `"${entry.id}"`,
-              `"${item.time || entry.submittedAt}"`,
-              `"${entry.status || '承認済'}"`,
-              `"${entry.unit}"`,
-              `"${entry.staffName || ''}"`,
-              `"${item.productName || ''}"`,
-              `"${item.spec || ''}"`,
-              `"${item.productUnit || ''}"`,
-              `"${item.vendorName || ''}"`,
+              escapeCSV(entry.id),
+              escapeCSV(item.time || entry.submittedAt),
+              escapeCSV(item.status || entry.status || '承認済'),
+              escapeCSV(entry.unit),
+              escapeCSV(entry.staffName || ''),
+              escapeCSV(item.productName || ''),
+              escapeCSV(item.spec || ''),
+              escapeCSV(item.productUnit || ''),
+              escapeCSV(item.vendorName || ''),
               item.facilityQty || 0,
               item.personalQty || 0,
-              `"${item.note || ''}"`,
-              `"${item.memo || ''}"`,
-              `"${entry.approver || ''}"`,
-              `"${entry.faxSentAt || ''}"`
+              escapeCSV(item.note || ''),
+              escapeCSV(item.memo || ''),
+              escapeCSV(entry.approver || ''),
+              escapeCSV(item.faxSentAt || entry.faxSentAt || '')
             ]);
           });
         });
@@ -591,7 +715,7 @@
         return p.unit || '個';
       };
 
-      // 業者別発注リスト取得 (マスター連動 & 申請中・承認済両対応)
+      // 業者別発注リスト取得 (F1: 選択業者のみ抽出 & F4: PII保護マスキング)
       const getOrdersForVendor = (vendorId) => {
         const list = [];
         const vId = Number(vendorId);
@@ -601,20 +725,68 @@
           Object.entries(uVal.cart || {}).forEach(([pId, item]) => {
             const p = masterProducts.find(pr => Number(pr.id) === parseInt(pId));
             if (p && Number(p.vendorId) === vId) {
-              if (item.facilityQty > 0) list.push({ name: p.name, spec: p.spec, qty: Number(item.facilityQty), unit: getProductDisplayUnit(p), note: uKey, unitName: uKey });
-              if (item.personalQty > 0) list.push({ name: p.name, spec: p.spec, qty: Number(item.personalQty), unit: getProductDisplayUnit(p), note: `${uKey} (${item.personalNames || '個人購入'})`, unitName: uKey });
+              if (item.facilityQty > 0) {
+                list.push({
+                  name: p.name,
+                  spec: p.spec,
+                  qty: Number(item.facilityQty),
+                  unit: getProductDisplayUnit(p),
+                  note: uKey,
+                  unitName: uKey,
+                  isPersonal: false,
+                  personalNames: ''
+                });
+              }
+              if (item.personalQty > 0) {
+                list.push({
+                  name: p.name,
+                  spec: p.spec,
+                  qty: Number(item.personalQty),
+                  unit: getProductDisplayUnit(p),
+                  // F4: 外部FAX注文書では入居者実名をマスクして [ユニット名] (個人分) と印字
+                  note: maskResidentNamesInFax ? `${uKey} (個人分)` : `${uKey} (${item.personalNames || '個人購入'})`,
+                  unitName: uKey,
+                  isPersonal: true,
+                  personalNames: item.personalNames || ''
+                });
+              }
             }
           });
         });
 
-        // 履歴データ (申請中 または 承認済の発注を網羅)
-        orderHistory.filter(h => h.status === '申請中' || h.status === '承認済').forEach(entry => {
+        // 履歴データ (該当業者かつ、まだFAX送信済になっていない明細を抽出 - F1)
+        orderHistory.forEach(entry => {
           (entry.items || []).forEach(item => {
             const prod = masterProducts.find(pr => Number(pr.id) === Number(item.productId));
             const itemVendorId = Number(item.vendorId) || (prod ? Number(prod.vendorId) : 0);
-            if (itemVendorId === vId) {
-              if (item.facilityQty > 0) list.push({ name: item.productName, spec: item.spec, qty: Number(item.facilityQty), unit: item.productUnit, note: item.note || item.unit, unitName: item.unit });
-              if (item.personalQty > 0) list.push({ name: item.productName, spec: item.spec, qty: Number(item.personalQty), unit: item.productUnit, note: item.note || item.unit, unitName: item.unit });
+            const itemStatus = item.status || entry.status;
+            if (itemVendorId === vId && itemStatus !== 'FAX送信済') {
+              const uKey = entry.unit;
+              if (item.facilityQty > 0) {
+                list.push({
+                  name: item.productName,
+                  spec: item.spec,
+                  qty: Number(item.facilityQty),
+                  unit: item.productUnit,
+                  note: uKey,
+                  unitName: uKey,
+                  isPersonal: false,
+                  personalNames: ''
+                });
+              }
+              if (item.personalQty > 0) {
+                list.push({
+                  name: item.productName,
+                  spec: item.spec,
+                  qty: Number(item.personalQty),
+                  unit: item.productUnit,
+                  // F4: 外部FAX注文書では入居者実名をマスクして [ユニット名] (個人分) と印字
+                  note: maskResidentNamesInFax ? `${uKey} (個人分)` : `${uKey} (${item.personalNames || '個人購入'})`,
+                  unitName: uKey,
+                  isPersonal: true,
+                  personalNames: item.personalNames || ''
+                });
+              }
             }
           });
         });
@@ -623,8 +795,11 @@
 
       const currentFaxVendor = masterVendors.find(v => v.id === selectedFaxVendorId) || masterVendors[0] || FALLBACK_VENDORS[0];
       const currentFaxOrders = getOrdersForVendor(selectedFaxVendorId);
+      // F8: 異なる単位の不正合算防止
+      const unitsInOrders = [...new Set(currentFaxOrders.map(o => o.unit))];
+      const isSingleUnit = unitsInOrders.length === 1;
       const totalFaxQuantity = currentFaxOrders.reduce((sum, ord) => sum + ord.qty, 0);
-      const mainUnitLabel = currentFaxOrders.length > 0 ? currentFaxOrders[0].unit : '個';
+      const mainUnitLabel = isSingleUnit ? unitsInOrders[0] : '';
       // FAX様式 B の場合のみ合計行を表示
       const showTotalRow = currentFaxVendor && currentFaxVendor.faxFormat === 'B';
 
@@ -683,7 +858,7 @@
             <div className="max-w-7xl mx-auto px-4 py-3.5">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md text-2xl" className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner text-2xl border border-white/30">🍲</div>
+                  <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner text-2xl border border-white/30">🍲</div>
                   <div>
                     <h1 className="text-lg font-bold leading-tight">栄養管理物品発注システム</h1>
                     <p className="text-sm text-slate-400">特別養護老人ホーム シルクロード七福神</p>
@@ -781,29 +956,29 @@
                               </div>
                               <div className="mt-4 pt-3 border-t grid grid-cols-2 gap-4">
                                 {product.allowFacility ? (
-                                  <div className="bg-sky-50 rounded-xl p-3 border flex justify-between items-center">
+                                  <div className="bg-sky-50 rounded-2xl p-3.5 border border-sky-200/80 flex justify-between items-center">
                                     <span className="text-xs font-bold text-sky-900">施設分</span>
-                                    <div className="flex items-center gap-1.5">
-                                      <button onClick={() => updateItemQty(product.id, 'facilityQty', -1)} className="w-8 h-8 bg-white rounded-lg border border-stone-300 font-black text-stone-700 hover:bg-stone-100 active:scale-95 shadow-sm text-sm">-</button>
-                                      <input type="number" min="0" value={item.facilityQty || ''} onChange={e => setItemQtyDirect(product.id, 'facilityQty', e.target.value)} placeholder="0" className="w-14 text-center text-sm font-bold bg-white border border-stone-300 rounded-lg py-1 focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-inner" />
-                                      <button onClick={() => updateItemQty(product.id, 'facilityQty', 1)} className="w-8 h-8 bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-lg font-black hover:opacity-90 active:scale-95 shadow-sm text-sm">+</button>
+                                    <div className="flex items-center gap-2">
+                                      <button onClick={() => updateItemQty(product.id, 'facilityQty', -1)} className="w-11 h-11 bg-white rounded-xl border border-stone-300 font-black text-stone-700 hover:bg-stone-100 active:scale-95 shadow-sm text-base flex items-center justify-center">-</button>
+                                      <input type="text" inputMode="numeric" value={item.facilityQty || ''} onChange={e => setItemQtyDirect(product.id, 'facilityQty', e.target.value)} placeholder="0" className="w-16 text-center text-base font-bold bg-white border border-stone-300 rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-inner" />
+                                      <button onClick={() => updateItemQty(product.id, 'facilityQty', 1)} className="w-11 h-11 bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-xl font-black hover:opacity-90 active:scale-95 shadow-sm text-base flex items-center justify-center">+</button>
                                     </div>
                                   </div>
-                                ) : <div className="bg-slate-50 p-3 rounded text-center text-xs text-slate-400 font-bold">施設分不可</div>}
+                                ) : <div className="bg-slate-50 p-3 rounded-2xl text-center text-xs text-slate-400 font-bold flex items-center justify-center">施設分不可</div>}
                                 {product.allowPersonal ? (
-                                  <div className="bg-amber-50 rounded-xl p-3 border flex justify-between items-center">
+                                  <div className="bg-amber-50 rounded-2xl p-3.5 border border-amber-200/80 flex justify-between items-center">
                                     <span className="text-xs font-bold text-amber-900">個人分</span>
-                                    <div className="flex items-center gap-1.5">
-                                      <button onClick={() => updateItemQty(product.id, 'personalQty', -1)} className="w-8 h-8 bg-white rounded-lg border border-stone-300 font-black text-stone-700 hover:bg-stone-100 active:scale-95 shadow-sm text-sm">-</button>
-                                      <input type="number" min="0" value={item.personalQty || ''} onChange={e => setItemQtyDirect(product.id, 'personalQty', e.target.value)} placeholder="0" className="w-14 text-center text-sm font-bold bg-white border border-stone-300 rounded-lg py-1 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner" />
-                                      <button onClick={() => updateItemQty(product.id, 'personalQty', 1)} className="w-8 h-8 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg font-black hover:opacity-90 active:scale-95 shadow-sm text-sm">+</button>
+                                    <div className="flex items-center gap-2">
+                                      <button onClick={() => updateItemQty(product.id, 'personalQty', -1)} className="w-11 h-11 bg-white rounded-xl border border-stone-300 font-black text-stone-700 hover:bg-stone-100 active:scale-95 shadow-sm text-base flex items-center justify-center">-</button>
+                                      <input type="text" inputMode="numeric" value={item.personalQty || ''} onChange={e => setItemQtyDirect(product.id, 'personalQty', e.target.value)} placeholder="0" className="w-16 text-center text-base font-bold bg-white border border-stone-300 rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner" />
+                                      <button onClick={() => updateItemQty(product.id, 'personalQty', 1)} className="w-11 h-11 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-black hover:opacity-90 active:scale-95 shadow-sm text-base flex items-center justify-center">+</button>
                                     </div>
                                   </div>
-                                ) : <div className="bg-slate-50 p-3 rounded text-center text-xs text-slate-400 font-bold">個人分不可</div>}
+                                ) : <div className="bg-slate-50 p-3 rounded-2xl text-center text-xs text-slate-400 font-bold flex items-center justify-center">個人分不可</div>}
                               </div>
                               {item.personalQty > 0 && (
                                 <div className="mt-3">
-                                  <label className="text-xs font-bold text-amber-800 block mb-1">個人購入者名（FAX備考欄に印字）</label>
+                                  <label className="text-xs font-bold text-amber-800 block mb-1">個人購入者名（施設内管理用・FAX印字は個人情報保護のためマスキング）</label>
                                   <input type="text" value={item.personalNames} onChange={e => updatePersonalNames(product.id, e.target.value)}
                                     placeholder="例：山田 太郎様" className="w-full p-2.5 text-xs rounded-xl border border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-amber-50" />
                                 </div>
@@ -833,16 +1008,16 @@
                           </div>
                           <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-2">
                             <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">現在選択中のカート内容</h4>
-                            {Object.entries(currentUnitState.cart || {}).filter(([_,it]) => it.facilityQty + it.personalQty > 0).length === 0 ? (
+                            {Object.entries(currentUnitState.cart || {}).filter(([_,it]) => (it.facilityQty || 0) + (it.personalQty || 0) > 0).length === 0 ? (
                               <p className="text-xs text-slate-400 py-2">商品が追加されていません</p>
                             ) : (
                               <ul className="space-y-1.5">
-                                {Object.entries(currentUnitState.cart || {}).filter(([_,it]) => it.facilityQty + it.personalQty > 0).map(([pId, it]) => {
+                                {Object.entries(currentUnitState.cart || {}).filter(([_,it]) => (it.facilityQty || 0) + (it.personalQty || 0) > 0).map(([pId, it]) => {
                                   const p = masterProducts.find(pr => pr.id === parseInt(pId));
                                   return p ? (
                                     <li key={pId} className="text-xs text-slate-800 flex justify-between items-center py-1 border-b border-slate-200">
                                       <span className="font-medium truncate">{p.name}</span>
-                                      <span className="font-bold ml-2 bg-white px-2 py-0.5 rounded border border-slate-300">{it.facilityQty + it.personalQty} {getProductDisplayUnit(p)}</span>
+                                      <span className="font-bold ml-2 bg-white px-2 py-0.5 rounded border border-slate-300">{(it.facilityQty || 0) + (it.personalQty || 0)} {getProductDisplayUnit(p)}</span>
                                     </li>
                                   ) : null;
                                 })}
@@ -850,9 +1025,13 @@
                             )}
                           </div>
                           <button onClick={handleSubmitOrder}
-                            className="w-full py-3.5 text-white font-bold text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all hover:opacity-90"
-                            className="w-full py-4 text-white font-black text-base rounded-2xl shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600">
-                            📤 [{currentUnit}] の発注を送信する
+                            disabled={isSubmitting}
+                            className={`w-full py-4 text-white font-black text-base rounded-2xl shadow-lg flex items-center justify-center gap-2 transition-all ${
+                              isSubmitting
+                                ? 'bg-slate-400 cursor-not-allowed opacity-75'
+                                : 'bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 hover:scale-[1.01] active:scale-[0.99] shadow-orange-500/25'
+                            }`}>
+                            {isSubmitting ? '⏳ 送信中...' : `📤 [${currentUnit}] の発注を送信する`}
                           </button>
                           <p className="text-xs text-slate-500 text-center">送信後、Googleスプレッドシートへリアルタイム登録されます。</p>
                         </div>
@@ -864,6 +1043,45 @@
                 {/* ===== 承認 & PDF ===== */}
                 {role === 'nutritionist' && (
                   <div className="space-y-6">
+                    {/* ユニット提出状況ダッシュボード (F11) */}
+                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🏢</span>
+                          <h3 className="text-sm font-bold text-slate-800">全ユニット発注提出状況</h3>
+                          <span className="text-xs text-slate-500 font-normal">（本日締切: {systemSettings.deadlineTime || '14:00'}）</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs font-bold">
+                          <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                            提出済: {activeUnits.filter(u => orderHistory.some(h => h.unit === u.name && (h.status === '申請中' || h.status === '承認済' || h.status === 'FAX送信済'))).length}
+                          </span>
+                          <span className="text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                            未提出: {activeUnits.filter(u => !orderHistory.some(h => h.unit === u.name && (h.status === '申請中' || h.status === '承認済' || h.status === 'FAX送信済'))).length}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2.5">
+                        {activeUnits.map(u => {
+                          const hasPending = orderHistory.some(h => h.unit === u.name && h.status === '申請中');
+                          const hasApprovedOrFaxed = orderHistory.some(h => h.unit === u.name && (h.status === '承認済' || h.status === 'FAX送信済'));
+                          return (
+                            <div key={u.id} className={`p-3 rounded-2xl border text-center transition-all ${
+                              hasPending
+                                ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-sm ring-2 ring-amber-300/50'
+                                : hasApprovedOrFaxed
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-900 shadow-xs'
+                                : 'bg-slate-50 border-slate-200 text-slate-400'
+                            }`}>
+                              <div className="font-bold text-sm">{u.name}</div>
+                              <div className="text-[11px] font-bold mt-1">
+                                {hasPending ? '🟡 申請中' : hasApprovedOrFaxed ? '✅ 提出済' : '⏳ 未提出'}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                     <div className="bg-white rounded-3xl p-5 shadow-sm border border-amber-200/70 flex flex-wrap items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-bold text-slate-700">👩‍⚕️ 管理栄養士 承認担当:</span>
@@ -938,7 +1156,7 @@
                 {/* ===== 発注履歴 ===== */}
                 {role === 'history' && (
                   <div className="space-y-6">
-                    <div className="text-white rounded-3xl p-6 shadow-xl flex flex-wrap items-center justify-between gap-4" className="text-white rounded-3xl p-6 shadow-xl flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-amber-700 via-orange-600 to-amber-800">
+                    <div className="text-white rounded-3xl p-6 shadow-xl flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-amber-700 via-orange-600 to-amber-800">
                       <div className="space-y-1">
                         <h2 className="text-lg font-bold">📋 発注履歴（全{orderHistory.length}件）</h2>
                         <p className="text-xs opacity-80">スプレッドシートの「発注データ」を正本として全端末で同期・表示されます。</p>
@@ -1065,14 +1283,14 @@
     </button>
   </div>
 
-                        {/* ステップ切替タブ */}
+                        {/* ステップ切替タブ (F5) */}
                         <div className="flex border-b border-slate-300 space-x-4">
                           {[
                             { step: 1, label: '📦 商品マスター管理' },
                             { step: 2, label: '🏬 業者マスター管理' },
                             { step: 3, label: '🏢 ユニットマスター管理' },
                             { step: 4, label: '👩‍⚕️ 管理栄養士マスター' },
-                            
+                            { step: 5, label: '⚙️ システム設定 / GAS連携' },
                           ].map(s => (
                             <button key={s.step} onClick={() => setSettingStep(s.step)}
                               className={`pb-3 text-sm font-bold border-b-2 transition-all ${settingStep === s.step ? 'border-orange-600 text-orange-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
@@ -1360,10 +1578,10 @@
             )}
           </main>
 
-          {/* ===== FAX注文票 (実物印刷モーダル) ===== */}
+          {/* ===== FAX注文票 (実物印刷モーダル - F2, F4, F8, F12) ===== */}
           {showFaxModal && (
-            <div className="fixed inset-0 bg-slate-900 bg-opacity-70 flex items-center justify-center p-4 print:p-0 print:bg-white print:static" style={{zIndex:9000,backdropFilter:'blur(4px)'}}>
-              <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden print:max-w-none print:w-full print:shadow-none print:rounded-none print:overflow-visible">
+            <div id="fax-modal-backdrop" className="fixed inset-0 bg-slate-900/70 flex items-center justify-center p-4 print:p-0 print:bg-white print:static" style={{zIndex:9000,backdropFilter:'blur(4px)'}}>
+              <div id="fax-modal-container" className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden print:max-w-none print:w-full print:shadow-none print:rounded-none print:overflow-visible print:bg-white">
                 <div className="p-4 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 no-print">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="font-bold text-sm">📠 FAX注文票 印刷プレビュー</span>
@@ -1380,9 +1598,14 @@
                         setSelectedApprover(e.target.value);
                         try { localStorage.setItem('NUTRITION_SELECTED_APPROVER', e.target.value); } catch(err){}
                       }} className="p-1 text-xs font-bold rounded bg-slate-900 text-white border-none focus:ring-1 focus:ring-sky-500">
+                        <option value="(なし・印字しない)">(なし・印字しない)</option>
                         {activeNutritionists.map(n => <option key={n.id} value={n.name}>{n.name}</option>)}
                       </select>
                     </div>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-300 font-bold cursor-pointer bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700 select-none">
+                      <input type="checkbox" checked={maskResidentNamesInFax} onChange={e => setMaskResidentNamesInFax(e.target.checked)} className="rounded text-sky-500" />
+                      <span>🛡️ 実名マスク (PII保護)</span>
+                    </label>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => window.print()} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-all">
@@ -1420,7 +1643,7 @@
                           <th className="border border-slate-900 p-2">品名</th>
                           <th className="border border-slate-900 p-2 text-center w-20">数量</th>
                           <th className="border border-slate-900 p-2 text-center w-16">単位</th>
-                          <th className="border border-slate-900 p-2">備考 (対象ユニット・個人名)</th>
+                          <th className="border border-slate-900 p-2">備考 (対象ユニット・区分)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1440,9 +1663,23 @@
                         {showTotalRow && currentFaxOrders.length > 0 && (
                           <tr className="bg-slate-100 font-bold border-t-2 border-slate-900">
                             <td colSpan="2" className="border border-slate-900 p-2 text-right">合計数量</td>
-                            <td className="border border-slate-900 p-2 text-center text-sm text-slate-900">{totalFaxQuantity}</td>
-                            <td className="border border-slate-900 p-2 text-center">{mainUnitLabel}</td>
-                            <td className="border border-slate-900 p-2 text-xs text-slate-500">※上記全明細の総合計数量</td>
+                            {isSingleUnit ? (
+                              <>
+                                <td className="border border-slate-900 p-2 text-center text-sm text-slate-900 font-bold">{totalFaxQuantity}</td>
+                                <td className="border border-slate-900 p-2 text-center">{mainUnitLabel}</td>
+                                <td className="border border-slate-900 p-2 text-xs text-slate-500">※上記全明細の総合計数量</td>
+                              </>
+                            ) : (
+                              <>
+                                <td colSpan="2" className="border border-slate-900 p-2 text-center text-xs text-slate-800">
+                                  {unitsInOrders.map(u => {
+                                    const sumForUnit = currentFaxOrders.filter(o => o.unit === u).reduce((s, o) => s + o.qty, 0);
+                                    return `${sumForUnit} ${u}`;
+                                  }).join(' / ')}
+                                </td>
+                                <td className="border border-slate-900 p-2 text-xs text-slate-500">※単位が異なるため品目別内訳記載</td>
+                              </>
+                            )}
                           </tr>
                         )}
                       </tbody>
@@ -1453,7 +1690,9 @@
                       <p className="font-bold">{facilityInfo.name || '特別養護老人ホーム シルクロード七福神'}</p>
                       <p>{facilityInfo.postal || '〒890-0082'} {facilityInfo.address || '鹿児島県鹿児島市紫原5丁目13-18'}</p>
                       <p className="font-mono">TEL: {facilityInfo.tel || '099-256-2729'} / FAX: {facilityInfo.fax || '099-256-3729'}</p>
-                      <p className="pt-1 font-bold text-slate-900">発注確認者: {selectedApprover} （管理栄養士）</p>
+                      {selectedApprover && selectedApprover !== '(なし・印字しない)' ? (
+                        <p className="pt-1 font-bold text-slate-900">発注確認者: {selectedApprover} （管理栄養士）</p>
+                      ) : null}
                     </div>
                   </div>
                 </div>

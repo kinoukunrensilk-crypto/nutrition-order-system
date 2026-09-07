@@ -190,7 +190,7 @@ function getAllSystemData() {
   if (unitSheet && unitSheet.getLastRow() > 1) {
     const rows = unitSheet.getRange(2, 1, unitSheet.getLastRow() - 1, 4).getValues();
     rows.forEach(r => {
-      if (r[3]) units.push({ id: Number(r[0]), name: String(r[1]), sortOrder: Number(r[2]), active: Boolean(r[3]) });
+      units.push({ id: Number(r[0]), name: String(r[1]), sortOrder: Number(r[2]), active: Boolean(r[3]) });
     });
   }
 
@@ -200,7 +200,7 @@ function getAllSystemData() {
   if (nutritionistSheet && nutritionistSheet.getLastRow() > 1) {
     const rows = nutritionistSheet.getRange(2, 1, nutritionistSheet.getLastRow() - 1, 4).getValues();
     rows.forEach(r => {
-      if (r[3]) nutritionists.push({ id: Number(r[0]), name: String(r[1]), role: String(r[2]), active: Boolean(r[3]) });
+      nutritionists.push({ id: Number(r[0]), name: String(r[1]), role: String(r[2]), active: Boolean(r[3]) });
     });
   }
 
@@ -256,7 +256,10 @@ function getAllSystemData() {
         personalQty: Number(r[12] || 0),
         personalNames: String(r[13] || ''),
         note: String(r[14] || r[3]),
-        time: String(r[1])
+        time: String(r[1]),
+        status: String(r[16] || '申請中'),
+        faxSentAt: String(r[19] || ''),
+        faxSender: String(r[20] || '')
       });
     });
 
@@ -331,14 +334,16 @@ function processData(data, callback) {
     return responseJSON({ success: true, message: `${data.items.length}件の発注をスプレッドシートへ登録しました！`, orderId }, callback);
   }
 
-  // Action 3: 発注ステータス更新 (承認・FAX送信済・確認済等)
-  if (data.action === 'updateOrderStatus') {
+  // Action 3: 発注ステータス更新 (承認・FAX送信済・確認済等) および 業者別FAX送信ステータス更新
+  if (data.action === 'updateOrderStatus' || data.action === 'updateOrderStatusByVendor') {
     const orderSheet = ss.getSheetByName('発注データ');
     if (!orderSheet || orderSheet.getLastRow() <= 1) return responseJSON({ success: false, error: '発注データが存在しません' }, callback);
 
     const nowStr = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
     const targetId = String(data.orderId || '');
-    const newStatus = String(data.status || '承認済');
+    const hasVendorTarget = data.action === 'updateOrderStatusByVendor' || (data.vendorId !== undefined && data.vendorId !== null);
+    const targetVendorId = hasVendorTarget ? Number(data.vendorId) : null;
+    const newStatus = String(data.status || (hasVendorTarget ? 'FAX送信済' : '承認済'));
     const sender = String(data.sender || data.approver || '管理栄養士');
 
     const range = orderSheet.getRange(2, 1, orderSheet.getLastRow() - 1, 22);
@@ -347,8 +352,23 @@ function processData(data, callback) {
 
     for (let i = 0; i < values.length; i++) {
       const rowOrderId = String(values[i][0]);
-      // ID指定更新 または 全申請中を一括更新 (targetId === 'ALL_PENDING')
-      if (rowOrderId === targetId || (targetId === 'ALL_PENDING' && values[i][16] === '申請中')) {
+      const rowVendorId = Number(values[i][9]);
+      const rowStatus = String(values[i][16]);
+
+      let shouldUpdate = false;
+      if (hasVendorTarget) {
+        // 該当業者かつ、まだFAX送信済になっていない明細（申請中または承認済）のみを更新
+        if (rowVendorId === targetVendorId && (rowStatus === '申請中' || rowStatus === '承認済')) {
+          shouldUpdate = true;
+        }
+      } else {
+        // ID指定更新 または 全申請中を一括更新 (targetId === 'ALL_PENDING')
+        if (rowOrderId === targetId || (targetId === 'ALL_PENDING' && rowStatus === '申請中')) {
+          shouldUpdate = true;
+        }
+      }
+
+      if (shouldUpdate) {
         values[i][16] = newStatus; // ステータス
         if (newStatus === '承認済') {
           values[i][17] = sender;  // 承認者
