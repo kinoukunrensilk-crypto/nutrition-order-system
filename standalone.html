@@ -209,6 +209,8 @@
       const [toastMessage, setToastMessage] = useState(null);
       const toastTimerRef = useRef(null);
       const [expandedHistoryId, setExpandedHistoryId] = useState(null);
+      const [selectedApprovedIds, setSelectedApprovedIds] = useState([]);
+      const [faxTargetEntryIds, setFaxTargetEntryIds] = useState(null);
 
       // GAS Web App URL
       const [gasUrl, setGasUrl] = useState(() => {
@@ -794,12 +796,12 @@
       };
 
       // 業者別発注リスト取得 (F1: 選択業者のみ抽出 & 過去FAX送信済み履歴参照対応)
-      const getOrdersForVendor = (vendorId, filterMode = faxFilterMode, dateFilter = faxDateFilter) => {
+      const getOrdersForVendor = (vendorId, filterMode = faxFilterMode, dateFilter = faxDateFilter, targetEntryIds = faxTargetEntryIds) => {
         const list = [];
         const vId = Number(vendorId);
 
         // カート内 (未送信): 'unfaxed' または 'all' の場合のみ含める
-        if (filterMode !== 'faxed') {
+        if (filterMode !== 'faxed' && (!targetEntryIds || targetEntryIds.length === 0)) {
           Object.entries(unitData).forEach(([uKey, uVal]) => {
             Object.entries(uVal.cart || {}).forEach(([pId, item]) => {
               const p = masterProducts.find(pr => Number(pr.id) === parseInt(pId));
@@ -1151,7 +1153,7 @@
                 {/* ===== 承認 & PDF ===== */}
                 {role === 'nutritionist' && (
                   <div className="space-y-6">
-                    {/* ユニット提出状況ダッシュボード (F11) */}
+                    {/* ユニット提出状況ダッシュボード */}
                     <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-3">
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
                         <div className="flex items-center gap-2">
@@ -1190,6 +1192,7 @@
                       </div>
                     </div>
 
+                    {/* 管理栄養士 担当者設定バナー */}
                     <div className="bg-white rounded-3xl p-5 shadow-sm border border-amber-200/70 flex flex-wrap items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-bold text-slate-700">👩‍⚕️ 管理栄養士 承認担当:</span>
@@ -1211,38 +1214,47 @@
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <button onClick={approveAllOrders}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition-all">
-                          ✅ 全申請を一括承認する
-                        </button>
-                        <button onClick={() => { setShowFaxModal(true); setFaxStatus('preview'); }}
-                          className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-xl shadow flex items-center gap-2 transition-all">
-                          📄 FAX注文票（PDFプレビュー）出力
+                        {pendingOrders.length > 0 && (
+                          <button onClick={approveAllOrders}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition-all">
+                            ✅ 届いた全申請を一括承認する ({pendingOrders.length}件)
+                          </button>
+                        )}
+                        <button onClick={() => { setFaxTargetEntryIds(null); setShowFaxModal(true); setFaxStatus('preview'); }}
+                          className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-all">
+                          📄 全体のFAX注文票（プレビュー）
                         </button>
                       </div>
                     </div>
 
-                    {/* 申請中一覧 */}
+                    {/* ===== ステップ1: 未承認の申請一覧 ===== */}
                     <div className="space-y-4">
-                      <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider">現在届いている各ユニットからの申請一覧</h3>
-                      {orderHistory.filter(h => h.status === '申請中').length === 0 ? (
-                        <div className="bg-white rounded-2xl p-12 text-center border space-y-3">
-                          <div className="text-5xl">✅</div>
-                          <p className="text-sm font-bold text-slate-600">現在、未処理の「申請中」発注はありません</p>
-                          <p className="text-xs text-slate-400">すべての発注は承認済み、または「📋 発注履歴」に保存されています。</p>
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-amber-800 flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center text-xs font-black">1</span>
+                          <span>🟡 未承認のユニット申請（{pendingOrders.length}件）</span>
+                        </h3>
+                        <span className="text-xs text-slate-500">内容を確認して「承認」すると、下のFAX待ちリストへ移動します</span>
+                      </div>
+
+                      {pendingOrders.length === 0 ? (
+                        <div className="bg-emerald-50/50 rounded-2xl p-6 text-center border border-emerald-200/60 space-y-1">
+                          <div className="text-2xl">✨</div>
+                          <p className="text-sm font-bold text-emerald-800">現在、未承認の申請はありません</p>
+                          <p className="text-xs text-slate-500">届いた申請はすべて承認され、下記の「承認済（FAX待ち）」または履歴に保管されています。</p>
                         </div>
                       ) : (
-                        orderHistory.filter(h => h.status === '申請中').map(entry => (
-                          <div key={entry.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
+                        pendingOrders.map(entry => (
+                          <div key={entry.id} className="bg-white rounded-2xl p-5 shadow-sm border border-amber-200/80 space-y-4">
                             <div className="flex items-center justify-between border-b pb-3">
                               <div className="flex items-center gap-3">
-                                <span className="px-3 py-1 bg-slate-900 text-white font-bold text-xs rounded-xl">{entry.unit}</span>
-                                <span className="text-sm font-bold text-slate-800">担当者: {entry.staffName}</span>
+                                <span className="px-3 py-1 bg-amber-600 text-white font-bold text-xs rounded-xl">{entry.unit}</span>
+                                <span className="text-sm font-bold text-slate-800">申請者: {entry.staffName}</span>
                                 <span className="text-xs text-slate-400">{formatDateTime(entry.submittedAt)}</span>
                               </div>
                               <button onClick={() => approveSingleOrder(entry.id)}
-                                className="px-4 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 font-bold text-xs rounded-xl transition-all">
-                                ✅ この申請を承認して履歴へ移す
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5">
+                                ✅ この申請を承認してFAX待ちへ
                               </button>
                             </div>
                             {entry.memo && (
@@ -1251,21 +1263,7 @@
                               </div>
                             )}
                             <div className="overflow-x-auto">
-                              <div className="flex items-center justify-between pb-1">
-                                    <span className="font-bold text-slate-600">発注明細一覧</span>
-                                    <button onClick={() => {
-                                      const firstItem = entry.items && entry.items[0];
-                                      if (firstItem && firstItem.vendorId) {
-                                        setSelectedFaxVendorId(Number(firstItem.vendorId));
-                                      }
-                                      setFaxFilterMode('all');
-                                      setFaxDateFilter(formatDateOnly(entry.submittedAt) || 'ALL');
-                                      setShowFaxModal(true);
-                                    }} className="px-3 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-300 font-bold text-xs rounded-lg shadow-xs flex items-center gap-1 transition-all">
-                                      📠 この発注のFAX注文票（PDF）を再表示
-                                    </button>
-                                  </div>
-                                  <table className="w-full text-left text-xs bg-white rounded-xl border">
+                              <table className="w-full text-left text-xs bg-white rounded-xl border">
                                 <thead><tr className="bg-slate-100 font-bold text-slate-700 border-b"><th className="p-2.5">商品名</th><th className="p-2.5 text-center">施設分</th><th className="p-2.5 text-center">個人分</th><th className="p-2.5">FAX備考</th><th className="p-2.5">振分先業者</th></tr></thead>
                                 <tbody className="divide-y divide-slate-100">
                                   {(entry.items || []).map((it, idx) => (
@@ -1284,15 +1282,102 @@
                         ))
                       )}
                     </div>
+
+                    {/* ===== ステップ2: 承認済・FAX待ち一覧 (選択してFAX出力) ===== */}
+                    <div className="space-y-4 pt-4 border-t-2 border-slate-200">
+                      <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-sky-900 to-indigo-950 p-5 rounded-3xl text-white shadow-lg">
+                        <div>
+                          <h3 className="text-base font-bold flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-sky-400 text-sky-950 flex items-center justify-center text-xs font-black">2</span>
+                            <span>🟢 承認済・FAX送信待ち一覧（{approvedOrders.length}件）</span>
+                          </h3>
+                          <p className="text-xs text-sky-200 mt-1">FAX送信したい発注にチェックを入れて、下のボタンから業者別注文書（PDF）を作成してください</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {approvedOrders.length > 0 && (
+                            <>
+                              <button onClick={selectAllApproved}
+                                className="px-3.5 py-2 bg-white/20 hover:bg-white/30 text-white font-bold text-xs rounded-xl border border-white/20 transition-all">
+                                {selectedApprovedIds.length === approvedOrders.length ? '☑ 全選択解除' : '☐ すべて選択'}
+                              </button>
+                              <button onClick={openFaxModalForSelected}
+                                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-2 transition-all transform hover:scale-105">
+                                🖨️ 選択した発注 ({selectedApprovedIds.length || approvedOrders.length}件) をFAX注文書（PDF）出力
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {approvedOrders.length === 0 ? (
+                        <div className="bg-white rounded-2xl p-10 text-center border space-y-2">
+                          <div className="text-4xl">📠</div>
+                          <p className="text-sm font-bold text-slate-600">現在、FAX待ちの「承認済」発注はありません</p>
+                          <p className="text-xs text-slate-400">ステップ1の「未承認申請」を承認すると、ここにチェック対象として表示されます。</p>
+                        </div>
+                      ) : (
+                        approvedOrders.map(entry => {
+                          const isSelected = selectedApprovedIds.includes(entry.id) || (selectedApprovedIds.length === 0 && true);
+                          return (
+                            <div key={entry.id} className={`bg-white rounded-2xl p-5 shadow-sm border transition-all ${
+                              isSelected ? 'border-sky-400 ring-2 ring-sky-300/40 bg-sky-50/20' : 'border-slate-200'
+                            }`}>
+                              <div className="flex items-center justify-between border-b pb-3">
+                                <div className="flex items-center gap-3">
+                                  <input type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleSelectApproved(entry.id)}
+                                    className="w-5 h-5 rounded text-sky-600 focus:ring-sky-500 cursor-pointer"
+                                  />
+                                  <span className="px-3 py-1 bg-slate-900 text-white font-bold text-xs rounded-xl">{entry.unit}</span>
+                                  <span className="text-sm font-bold text-slate-800">担当: {entry.staffName}</span>
+                                  <span className="text-xs text-slate-400">{formatDateTime(entry.submittedAt)}</span>
+                                  <span className="text-xs bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full font-bold">🟢 承認済 (FAX待ち)</span>
+                                </div>
+                                <button onClick={() => {
+                                  setFaxTargetEntryIds([entry.id]);
+                                  const firstItem = entry.items && entry.items[0];
+                                  if (firstItem && firstItem.vendorId) setSelectedFaxVendorId(Number(firstItem.vendorId));
+                                  setShowFaxModal(true);
+                                  setFaxStatus('preview');
+                                }} className="px-3.5 py-1.5 bg-sky-100 hover:bg-sky-200 text-sky-900 font-bold text-xs rounded-xl border border-sky-300 transition-all flex items-center gap-1">
+                                  📠 この発注のみ単独FAX（PDF）
+                                </button>
+                              </div>
+                              {entry.memo && (
+                                <div className="bg-slate-50 p-2.5 rounded-xl text-xs text-slate-600 mt-2">
+                                  <span className="font-bold">📝 メモ: </span>{entry.memo}
+                                </div>
+                              )}
+                              <div className="overflow-x-auto mt-3">
+                                <table className="w-full text-left text-xs bg-white rounded-xl border">
+                                  <thead><tr className="bg-slate-100 font-bold text-slate-700 border-b"><th className="p-2.5">商品名</th><th className="p-2.5 text-center">施設分</th><th className="p-2.5 text-center">個人分</th><th className="p-2.5">備考</th><th className="p-2.5">振分先業者</th></tr></thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {(entry.items || []).map((it, idx) => (
+                                      <tr key={idx}>
+                                        <td className="p-2.5 font-bold text-slate-800">{it.productName}</td>
+                                        <td className="p-2.5 text-center font-bold text-sky-700">{it.facilityQty > 0 ? `${it.facilityQty} ${getProductDisplayUnit(it)}` : '-'}</td>
+                                        <td className="p-2.5 text-center font-bold text-amber-700">{it.personalQty > 0 ? `${it.personalQty} ${getProductDisplayUnit(it)}` : '-'}</td>
+                                        <td className="p-2.5 text-slate-600">{it.note}</td>
+                                        <td className="p-2.5 font-medium text-slate-600">{it.vendorName || '-'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
                 )}
-
                 {/* ===== 発注履歴 ===== */}
                 {role === 'history' && (
                   <div className="space-y-6">
                     <div className="text-white rounded-3xl p-6 shadow-xl flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-amber-700 via-orange-600 to-amber-800">
                       <div className="space-y-1">
-                        <h2 className="text-lg font-bold">📋 発注履歴（全{orderHistory.length}件）</h2>
+                        <h2 className="text-lg font-bold">📋 発注履歴・FAX送信控え（全{orderHistory.length}件）</h2>
                         </div>
                       <div className="flex items-center gap-3">
                         <button onClick={exportHistoryToCSV}
