@@ -189,7 +189,27 @@
       });
 
       const [unitData, setUnitData] = useState({});
-      const [orderHistory, setOrderHistory] = useState([]);
+            const [orderHistory, setOrderHistory] = useState(() => {
+        try {
+          const saved = localStorage.getItem('NUTRITION_ORDER_HISTORY');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            return parsed.map(entry => ({
+              ...entry,
+              items: (entry.items || []).map(it => {
+                const name = (it.productName || it.name || '').toLowerCase();
+                const spec = (it.spec || '').toLowerCase();
+                let unit = it.productUnit || it.unit || '個';
+                if ((name.includes('米') || name.includes('こめ') || spec.includes('kg')) && unit === '個') {
+                  unit = spec.includes('袋') ? '袋' : 'kg';
+                }
+                return { ...it, productUnit: unit, unit };
+              })
+            }));
+          }
+        } catch(e) {}
+        return [];
+      });
 
       // 編集用モーダルState (マスター管理)
       const [editingMasterItem, setEditingMasterItem] = useState(null);
@@ -242,8 +262,20 @@
               if (data.nutritionists && data.nutritionists.length > 0) setMasterNutritionists(data.nutritionists);
               if (data.settings) setSystemSettings(prev => ({ ...prev, ...data.settings }));
               if (data.orderHistory) {
-                setOrderHistory(data.orderHistory);
-                try { localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(data.orderHistory)); } catch {}
+                const sanitizedHistory = data.orderHistory.map(entry => ({
+                  ...entry,
+                  items: (entry.items || []).map(it => {
+                    const name = (it.productName || it.name || '').toLowerCase();
+                    const spec = (it.spec || '').toLowerCase();
+                    let unit = it.productUnit || it.unit || '個';
+                    if ((name.includes('米') || name.includes('こめ') || spec.includes('kg')) && unit === '個') {
+                      unit = spec.includes('袋') ? '袋' : 'kg';
+                    }
+                    return { ...it, productUnit: unit, unit };
+                  })
+                }));
+                setOrderHistory(sanitizedHistory);
+                try { localStorage.setItem('NUTRITION_ORDER_HISTORY', JSON.stringify(sanitizedHistory)); } catch {}
               }
               setIsNetworkError(false);
             }
@@ -702,17 +734,20 @@
         }
       };
 
-      // 商品マスターの単位または品名・規格に基づく最適な表示単位の取得
+      // 商品マスターの単位または品名・規格に基づく最適な表示単位の取得 (過去履歴の米・kg商品含む完全正規化)
       const getProductDisplayUnit = (p) => {
         if (!p) return '個';
-        if (p.unit && p.unit !== '個') return p.unit;
-        const name = (p.name || '').toLowerCase();
+        const name = (p.name || p.productName || '').toLowerCase();
         const spec = (p.spec || '').toLowerCase();
+        const rawUnit = p.unit || p.productUnit || '';
+        // 米・こめ・kg規格のものは過去履歴の古い「個」表記であっても「kg」または「袋」に正規化
         if (name.includes('米') || name.includes('こめ') || spec.includes('kg')) {
           if (spec.includes('袋')) return '袋';
+          if (rawUnit && rawUnit !== '個') return rawUnit;
           return 'kg';
         }
-        return p.unit || '個';
+        if (rawUnit && rawUnit !== '個') return rawUnit;
+        return rawUnit || '個';
       };
 
       // 業者別発注リスト取得 (F1: 選択業者のみ抽出 & F4: PII保護マスキング)
@@ -767,7 +802,7 @@
                   name: item.productName,
                   spec: item.spec,
                   qty: Number(item.facilityQty),
-                  unit: item.productUnit,
+                  unit: getProductDisplayUnit(item),
                   note: uKey,
                   unitName: uKey,
                   isPersonal: false,
@@ -779,7 +814,7 @@
                   name: item.productName,
                   spec: item.spec,
                   qty: Number(item.personalQty),
-                  unit: item.productUnit,
+                  unit: getProductDisplayUnit(item),
                   // F4: 外部FAX注文書では入居者実名をマスクして [ユニット名] (個人分) と印字
                   note: maskResidentNamesInFax ? `${uKey} (個人分)` : `${uKey} (${item.personalNames || '個人購入'})`,
                   unitName: uKey,
@@ -1149,8 +1184,8 @@
                                   {(entry.items || []).map((it, idx) => (
                                     <tr key={idx}>
                                       <td className="p-2.5 font-bold text-slate-800">{it.productName}</td>
-                                      <td className="p-2.5 text-center font-bold text-sky-700">{it.facilityQty > 0 ? `${it.facilityQty} ${it.productUnit||''}` : '-'}</td>
-                                      <td className="p-2.5 text-center font-bold text-amber-700">{it.personalQty > 0 ? `${it.personalQty} ${it.productUnit||''}` : '-'}</td>
+                                      <td className="p-2.5 text-center font-bold text-sky-700">{it.facilityQty > 0 ? `${it.facilityQty} ${getProductDisplayUnit(it)}` : '-'}</td>
+                                      <td className="p-2.5 text-center font-bold text-amber-700">{it.personalQty > 0 ? `${it.personalQty} ${getProductDisplayUnit(it)}` : '-'}</td>
                                       <td className="p-2.5 text-slate-600">{it.note}</td>
                                       <td className="p-2.5 font-medium text-slate-600">{it.vendorName || '-'}</td>
                                     </tr>
@@ -1246,8 +1281,8 @@
                                       {(entry.items || []).map((item, idx) => (
                                         <tr key={idx} className="hover:bg-slate-50">
                                           <td className="p-2.5 font-bold text-slate-800">{item.productName}</td>
-                                          <td className="p-2.5 text-center font-bold text-sky-700">{item.facilityQty > 0 ? `${item.facilityQty} ${item.productUnit||''}` : '-'}</td>
-                                          <td className="p-2.5 text-center font-bold text-amber-700">{item.personalQty > 0 ? `${item.personalQty} ${item.productUnit||''}` : '-'}</td>
+                                          <td className="p-2.5 text-center font-bold text-sky-700">{item.facilityQty > 0 ? `${item.facilityQty} ${getProductDisplayUnit(item)}` : '-'}</td>
+                                          <td className="p-2.5 text-center font-bold text-amber-700">{item.personalQty > 0 ? `${item.personalQty} ${getProductDisplayUnit(item)}` : '-'}</td>
                                           <td className="p-2.5 text-slate-600">{item.note}</td>
                                           <td className="p-2.5 text-slate-600 font-medium">{item.vendorName || '-'}</td>
                                         </tr>
