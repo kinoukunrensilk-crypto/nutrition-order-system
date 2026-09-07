@@ -98,6 +98,47 @@
       return `${m}月${d}日`;
     };
 
+      // 日時フォーマット・日付抽出ヘルパー
+      const parseDateSafe = (val) => {
+        if (!val) return null;
+        const d = new Date(val);
+        if (!isNaN(d.getTime())) return d;
+        const match = String(val).match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+        if (match) {
+          const d2 = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+          if (!isNaN(d2.getTime())) return d2;
+        }
+        return null;
+      };
+
+      const formatDateTime = (dateVal) => {
+        if (!dateVal) return '';
+        const d = parseDateSafe(dateVal);
+        if (!d) return String(dateVal);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const days = ['日', '月', '火', '水', '木', '金', '土'];
+        const week = days[d.getDay()];
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        return `${y}/${m}/${day} (${week}) ${hh}:${mm}`;
+      };
+
+      const formatDateOnly = (dateVal) => {
+        if (!dateVal) return '';
+        const d = parseDateSafe(dateVal);
+        if (!d) {
+          const str = String(dateVal).trim();
+          return str.split(' ')[0] || '';
+        }
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+    
+
     // ===== デフォルトデータ (新スプレッドシートマスター連携URL) =====
     const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzLF99K3Mi9WJQjIksTARj9HJVIPHgcBMn51vFyDniZ3Xe_5et99Te4wWghcEvWwfrs/exec';
     
@@ -798,7 +839,7 @@
 
         // 履歴データから抽出
         orderHistory.forEach(entry => {
-          const entryDate = (entry.submittedAt || '').split(' ')[0] || (entry.faxSentAt || '').split(' ')[0] || '';
+          const entryDate = formatDateOnly(entry.submittedAt) || formatDateOnly(entry.faxSentAt) || '';
           if (dateFilter !== 'ALL' && entryDate !== dateFilter) return;
 
           (entry.items || []).forEach(item => {
@@ -855,8 +896,8 @@
       // 過去のFAX送信日・申請日の一覧をユニーク抽出
       const availableFaxDates = [...new Set(
         orderHistory.flatMap(e => [
-          (e.faxSentAt || '').split(' ')[0],
-          (e.submittedAt || '').split(' ')[0]
+          formatDateOnly(e.faxSentAt),
+          formatDateOnly(e.submittedAt)
         ]).filter(Boolean)
       )].sort().reverse();
 
@@ -1197,7 +1238,7 @@
                               <div className="flex items-center gap-3">
                                 <span className="px-3 py-1 bg-slate-900 text-white font-bold text-xs rounded-xl">{entry.unit}</span>
                                 <span className="text-sm font-bold text-slate-800">担当者: {entry.staffName}</span>
-                                <span className="text-xs text-slate-400">{entry.submittedAt}</span>
+                                <span className="text-xs text-slate-400">{formatDateTime(entry.submittedAt)}</span>
                               </div>
                               <button onClick={() => approveSingleOrder(entry.id)}
                                 className="px-4 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 font-bold text-xs rounded-xl transition-all">
@@ -1218,7 +1259,7 @@
                                         setSelectedFaxVendorId(Number(firstItem.vendorId));
                                       }
                                       setFaxFilterMode('all');
-                                      setFaxDateFilter((entry.submittedAt || '').split(' ')[0] || 'ALL');
+                                      setFaxDateFilter(formatDateOnly(entry.submittedAt) || 'ALL');
                                       setShowFaxModal(true);
                                     }} className="px-3 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-300 font-bold text-xs rounded-lg shadow-xs flex items-center gap-1 transition-all">
                                       📠 この発注のFAX注文票（PDF）を再表示
@@ -1252,8 +1293,7 @@
                     <div className="text-white rounded-3xl p-6 shadow-xl flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-amber-700 via-orange-600 to-amber-800">
                       <div className="space-y-1">
                         <h2 className="text-lg font-bold">📋 発注履歴（全{orderHistory.length}件）</h2>
-                        <p className="text-xs opacity-80">スプレッドシートの「発注データ」を正本として全端末で同期・表示されます。</p>
-                      </div>
+                        </div>
                       <div className="flex items-center gap-3">
                         <button onClick={exportHistoryToCSV}
                           className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow flex items-center gap-2 transition-all">
@@ -1309,7 +1349,7 @@
                                 <span className="px-3 py-1.5 bg-slate-900 text-white font-bold text-xs rounded-xl">{entry.unit}</span>
                                 <div>
                                   <p className="text-sm font-bold text-slate-800">{entry.staffName}　<span className="text-xs text-slate-400 font-normal">({entry.items?.length || 0}品目)</span></p>
-                                  <p className="text-xs text-slate-500">{entry.submittedAt}</p>
+                                  <p className="text-xs text-slate-500">{formatDateTime(entry.submittedAt)}</p>
                                 </div>
                               </div>
                               <div className="flex items-center gap-3">
