@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>【ユニットスタッフ用】栄養管理物品 発注操作マニュアル</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Meiryo", "BIZ UDPGothic", sans-serif;
+      color: #1e293b;
+      line-height: 1.5;
+      background: #f8fafc;
+      margin: 0;
+      padding: 15px;
+    }
+    .page-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 24px 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+    }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .page-container { box-shadow: none; padding: 0; max-width: 100%; }
+      .no-print { display: none !important; }
+    }
+    .header {
+      border-bottom: 3px solid #ea580c;
+      padding-bottom: 8px;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .title-area h1 {
+      margin: 0 0 4px 0;
+      font-size: 20px;
+      color: #9a3412;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .subtitle {
+      margin: 0;
+      font-size: 12px;
+      color: #64748b;
+      font-weight: bold;
+    }
+    .badge {
+      background: #ea580c;
+      color: #fff;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-weight: bold;
+    }
+    .flow-banner {
+      background: #fff7ed;
+      border: 2px dashed #fdba74;
+      border-radius: 10px;
+      padding: 8px 14px;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .flow-steps {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      font-size: 12px;
+      font-weight: bold;
+      color: #9a3412;
+      margin-top: 4px;
+    }
+    .step-arrow { color: #f97316; font-size: 14px; }
+    .step-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-left: 5px solid #f97316;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+    }
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .step-num {
+      background: #f97316;
+      color: white;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .step-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #0f172a;
+      margin: 0;
+    }
+    .desc {
+      font-size: 12px;
+      color: #334155;
+      margin: 0 0 6px 0;
+    }
+    .point-box {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #166534;
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+      margin-top: 6px;
+    }
+    .warn-box {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #991b1b;
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+      margin-top: 6px;
+    }
+    .ui-mock {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      margin: 6px 0;
+    }
+    .key-button {
+      display: inline-block;
+      background: #ea580c;
+      color: #fff;
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .key-button-green {
+      display: inline-block;
+      background: #16a34a;
+      color: #fff;
+      font-weight: bold;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .table-guide {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-top: 4px;
+    }
+    .table-guide th, .table-guide td {
+      border: 1px solid #cbd5e1;
+      padding: 5px 8px;
+    }
+    .table-guide th {
+      background: #f1f5f9;
+      font-weight: bold;
+      color: #334155;
+    }
+    .qa-box {
+      background: #f8fafc;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+      padding: 10px 14px;
+      margin-top: 14px;
+    }
+    .qa-title {
+      font-size: 13px;
+      font-weight: bold;
+      color: #334155;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .qa-item {
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+    .qa-q { font-weight: bold; color: #ea580c; }
+    .qa-a { color: #475569; margin-left: 4px; }
+  </style>
+</head>
+<body>
+
+  <div class="no-print" style="max-width: 800px; margin: 5px auto 15px; text-align: right;">
+    <button onclick="window.print()" style="background: #ea580c; color: white; border: none; padding: 8px 18px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
+      🖨️ このマニュアルを印刷 / PDF保存する
+    </button>
+  </div>
+
+  <div class="page-container">
+    <!-- Header -->
+    <div class="header">
+      <div class="title-area">
+        <h1>🍲 栄養物品発注操作マニュアル</h1>
+        <p class="subtitle">特別養護老人ホーム シルクロード七福神 【ユニット職員用】</p>
+      </div>
+      <div>
+        <span class="badge">現場スタッフ向け・超かんたん版</span>
+      </div>
+    </div>
+
+    <!-- Flow Banner -->
+    <div class="flow-banner">
+      <strong style="color:#c2410c; font-size:12px;">発注はかんたん！たったの 4 ステップ（本日締切: 14:00）</strong>
+      <div class="flow-steps">
+        <span>① ユニット選択</span>
+        <span class="step-arrow">➔</span>
+        <span>② 担当者名を入力</span>
+        <span class="step-arrow">➔</span>
+        <span>③ 数量を入れる</span>
+        <span class="step-arrow">➔</span>
+        <span>④ 発注を送信！</span>
+      </div>
+    </div>
+
+    <!-- STEP 1 -->
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-num">1</div>
+        <h2 class="step-title">自分のユニットを選ぶ</h2>
+      </div>
+      <p class="desc">
+        画面上の「🏢 ユニット選択」から、ご自身のユニット（例: <strong>2W, 3E</strong> など）をタップします。
+      </p>
+      <div class="ui-mock">
+        <strong>選択例: </strong>
+        <span style="display:inline-block; padding:3px 8px; background:#0f172a; color:#fff; border-radius:6px; font-weight:bold; margin-left:4px;">2W (選択中)</span>
+        <span style="display:inline-block; padding:3px 8px; background:#e2e8f0; color:#334155; border-radius:6px; margin-left:4px;">2E</span>
+        <span style="display:inline-block; padding:3px 8px; background:#e2e8f0; color:#334155; border-radius:6px; margin-left:4px;">3W</span> ...
+      </div>
+      <div class="point-box">
+        <span>💡</span>
+        <span><strong>前回と同じ発注をそのまま使いたい場合:</strong>「📋 前回の発注内容を呼び出す」ボタンを押すと、前回の発注内容が自動でカートに入ります！</span>
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-num">2</div>
+        <h2 class="step-title">担当者名を入力する</h2>
+      </div>
+      <p class="desc">
+        「✍️ 発注担当スタッフ名」の欄にご自身のフルネーム（または名字）を入力してください。
+      </p>
+      <div class="ui-mock">
+        <label>担当スタッフ名: </label>
+        <span style="padding:2px 8px; border-radius:4px; border:1px solid #94a3b8; background:#fff; font-weight:bold; color:#0f172a;">山田 花子</span>
+      </div>
+      <div class="warn-box">
+        <span>⚠️</span>
+        <span>担当者名が空欄のままだと送信ボタンが押せません。必ずお名前を入力してください。</span>
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-num">3</div>
+        <h2 class="step-title">欲しい商品の数量を入力する（施設分／個人分）</h2>
+      </div>
+      <p class="desc">
+        商品一覧から必要な物品を探し、<span class="key-button">＋</span> / <span class="key-button">−</span> ボタンを押すか、直接数字を入力します。
+      </p>
+
+      <table class="table-guide">
+        <thead>
+          <tr>
+            <th style="width:22%;">区分</th>
+            <th style="width:38%;">対象の物品</th>
+            <th>入力のコツと注意点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>🏢 施設分</strong></td>
+            <td>ユニット全体で使う調味料・とろみ剤</td>
+            <td>「＋」を押して必要な個数（袋・本）を入れます。</td>
+          </tr>
+          <tr>
+            <td><strong>👤 個人分</strong></td>
+            <td>入居者様個人で購入するとろみ剤など</td>
+            <td>「＋」で数量を入れ、<strong>対象者のお名前（例: 201佐藤様）</strong>を入力します。</td>
+          </tr>
+          <tr>
+            <td><strong>🍚 お米 (精米)</strong></td>
+            <td>無洗米・精米（山口米店）</td>
+            <td><strong>「1kg単位」</strong>で直接数字を入力・増減できます（例: 10kg、15kg）。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-num">4</div>
+        <h2 class="step-title">カートを確認して「発注を申請する」を押す</h2>
+      </div>
+      <p class="desc">
+        右側の「🛒 カート」で合計数量と商品を確認します。栄養士への伝言があれば「📝 申送りメモ」に記入してください。
+      </p>
+      <div style="text-align:center; margin:8px 0;">
+        <span class="key-button-green">
+          🚀 ○○ユニットの発注を申請する（送信）
+        </span>
+      </div>
+      <div class="point-box">
+        <span>✅</span>
+        <span>送信後、確認画面で「OK」を押して「申請が完了しました！」と表示されたら完了です！お疲れ様でした。</span>
+      </div>
+    </div>
+
+    <!-- Q&A Section -->
+    <div class="qa-box">
+      <div class="qa-title">❓ よくある質問・困ったときは？</div>
+      <div class="qa-item">
+        <span class="qa-q">Q. 送信後に間違いに気づきました！</span>
+        <span class="qa-a">A. すぐに管理栄養士へお声がけください。管理栄養士側で承認前なら修正・取り消しが可能です。</span>
+      </div>
+      <div class="qa-item">
+        <span class="qa-q">Q. 締切時間（14:00）を過ぎてしまいました！</span>
+        <span class="qa-a">A. 画面に「締切オーバー注意」と表示されますが申請は可能です。遅れた旨を管理栄養士へ直接お伝えください。</span>
+      </div>
+      <div class="qa-item">
+        <span class="qa-q">Q. 頼みたい商品が一覧に見当たりません。</span>
+        <span class="qa-a">A. 管理栄養士に商品マスターへの追加をご相談ください。</span>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

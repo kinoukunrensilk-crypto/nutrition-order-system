@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>【管理栄養士用】発注承認＆FAX注文書発行マニュアル</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Meiryo", "BIZ UDPGothic", sans-serif;
+      color: #1e293b;
+      line-height: 1.5;
+      background: #f8fafc;
+      margin: 0;
+      padding: 15px;
+    }
+    .page-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 24px 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+    }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .page-container { box-shadow: none; padding: 0; max-width: 100%; }
+      .no-print { display: none !important; }
+    }
+    .header {
+      border-bottom: 3px solid #0284c7;
+      padding-bottom: 8px;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .title-area h1 {
+      margin: 0 0 4px 0;
+      font-size: 20px;
+      color: #0369a1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .subtitle {
+      margin: 0;
+      font-size: 12px;
+      color: #64748b;
+      font-weight: bold;
+    }
+    .badge {
+      background: #0284c7;
+      color: #fff;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-weight: bold;
+    }
+    .flow-banner {
+      background: #f0f9ff;
+      border: 2px dashed #7dd3fc;
+      border-radius: 10px;
+      padding: 8px 14px;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .flow-steps {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      font-size: 12px;
+      font-weight: bold;
+      color: #0369a1;
+      margin-top: 4px;
+    }
+    .step-arrow { color: #0284c7; font-size: 14px; }
+    .step-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-left: 5px solid #0284c7;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+    }
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .step-num {
+      background: #0284c7;
+      color: white;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .step-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #0f172a;
+      margin: 0;
+    }
+    .desc {
+      font-size: 12px;
+      color: #334155;
+      margin: 0 0 6px 0;
+    }
+    .point-box {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #166534;
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+      margin-top: 6px;
+    }
+    .warn-box {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #991b1b;
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+      margin-top: 6px;
+    }
+    .ui-mock {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      margin: 6px 0;
+    }
+    .key-button-green {
+      display: inline-block;
+      background: #16a34a;
+      color: #fff;
+      font-weight: bold;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+    }
+    .key-button-blue {
+      display: inline-block;
+      background: #0284c7;
+      color: #fff;
+      font-weight: bold;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+    }
+    .badge-status {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: bold;
+    }
+    .qa-box {
+      background: #f8fafc;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+      padding: 10px 14px;
+      margin-top: 14px;
+    }
+    .qa-title {
+      font-size: 13px;
+      font-weight: bold;
+      color: #334155;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .qa-item {
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+    .qa-q { font-weight: bold; color: #0284c7; }
+    .qa-a { color: #475569; margin-left: 4px; }
+  </style>
+</head>
+<body>
+
+  <div class="no-print" style="max-width: 800px; margin: 5px auto 15px; text-align: right;">
+    <button onclick="window.print()" style="background: #0284c7; color: white; border: none; padding: 8px 18px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
+      🖨️ このマニュアルを印刷 / PDF保存する
+    </button>
+  </div>
+
+  <div class="page-container">
+    <!-- Header -->
+    <div class="header">
+      <div class="title-area">
+        <h1>👩‍⚕️ 発注承認 & FAX注文書発行マニュアル</h1>
+        <p class="subtitle">特別養護老人ホーム シルクロード七福神 【管理栄養士用】</p>
+      </div>
+      <div>
+        <span class="badge">承認者・発注担当者向け完全版</span>
+      </div>
+    </div>
+
+    <!-- Flow Banner -->
+    <div class="flow-banner">
+      <strong style="color:#0369a1; font-size:12px;">一本道フロー：申請確認 ➔ 承認 ➔ 選択してFAX（PDF） ➔ 履歴へ保管</strong>
+      <div class="flow-steps">
+        <span>① 提出状況チェック</span>
+        <span class="step-arrow">➔</span>
+        <span>② 届いた申請を「承認」</span>
+        <span class="step-arrow">➔</span>
+        <span>③ 選択してFAX注文書出力</span>
+        <span class="step-arrow">➔</span>
+        <span>④ 送信完了で履歴へ保管</span>
+      </div>
+    </div>
+
+    <!-- STEP 1 -->
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-num">1</div>
+        <h2 class="step-title">全ユニットの提出状況を確認する</h2>
+      </div>
+      <p class="desc">
+        画面上部の「🏢 全ユニット発注提出状況」を見れば、14:00の締切までにどのユニットが申請済みか一目で分かります。
+      </p>
+      <div class="ui-mock">
+        <span class="badge-status" style="background:#fef3c7; color:#92400e; border:1px solid #fcd34d;">🟡 申請中</span> : 届いたばかりの申請
+        <span class="badge-status" style="background:#dbeafe; color:#1e40af; border:1px solid #93c5fd; margin-left:8px;">🟢 承認済</span> : FAX送信待ち
+        <span class="badge-status" style="background:#d1fae5; color:#065f46; border:1px solid #6ee7b7; margin-left:8px;">✅ 提出済</span> : FAX送信完了
+        <span class="badge-status" style="background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; margin-left:8px;">⏳ 未提出</span> : まだ申請なし
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-num">2</div>
+        <h2 class="step-title">未承認の申請を確認して「承認」する</h2>
+      </div>
+      <p class="desc">
+        「ステップ1: 🟡 未承認のユニット申請」に並んでいる明細をチェックし、問題なければ承認します。
+      </p>
+      <div style="display:flex; gap:8px; margin:6px 0;">
+        <span class="key-button-green">✅ この申請を承認してFAX待ちへ</span>
+        <span class="key-button-green" style="background:#059669;">✅ 届いた全申請を一括承認する</span>
+      </div>
+      <div class="point-box">
+        <span>💡</span>
+        <span>承認すると、対象の発注が自動的に下の「ステップ2: 🟢 承認済・FAX送信待ち一覧」へ移動します。</span>
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-num">3</div>
+        <h2 class="step-title">本日FAXする発注を選択し、FAX注文書（PDF）を作成</h2>
+      </div>
+      <p class="desc">
+        「ステップ2: 🟢 承認済・FAX送信待ち一覧」で、本日FAX送信したい発注にチェック（☑）を入れます。
+      </p>
+      <div class="ui-mock">
+        <button class="key-button-blue" style="background:#0284c7; padding:5px 12px; font-size:12px;">
+          🖨️ 選択した発注 (○件) をFAX注文書（PDF）出力
+        </button>
+        <span style="font-size:11px; color:#64748b; margin-left:8px;">（「☐ すべて選択」ボタンで全件一括選択も可能です）</span>
+      </div>
+      <div class="point-box">
+        <span>📄</span>
+        <span><strong>自動合算＆業者振り分け:</strong> アサヒ物産、藤安醸造、山口米店（お米kg合算）など、業者ごとに自動集約されたA4注文書が開きます。</span>
+      </div>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-num">4</div>
+        <h2 class="step-title">印刷・PDF保存して「FAX送信済みにする」を押す</h2>
+      </div>
+      <p class="desc">
+        プレビュー画面で内容を確認し、印刷（またはPDF保存）したあと、必ず送信完了ボタンを押します。
+      </p>
+      <div style="display:flex; gap:8px; margin:6px 0;">
+        <span class="key-button-blue" style="background:#0f172a;">🖨️ 印刷 / PDF保存</span>
+        <span class="key-button-blue" style="background:#0284c7;">📠 FAX送信済みにする</span>
+      </div>
+      <div class="point-box">
+        <span>✅</span>
+        <span>「FAX送信済みにする」を押すと、FAX待ちリストから消えて「📋 発注履歴」へ自動保管されます。二重FAXの心配がありません！</span>
+      </div>
+    </div>
+
+    <!-- Q&A Section -->
+    <div class="qa-box">
+      <div class="qa-title">❓ よくある質問・運用Tips</div>
+      <div class="qa-item">
+        <span class="qa-q">Q. 過去に送信したFAX注文書をもう一度確認・再印刷したい。</span>
+        <span class="qa-a">A. 上部タブ「📋 発注履歴」を開き、各発注の「📠 この発注のFAX注文票を再表示」を押すと、いつでも再出力できます。</span>
+      </div>
+      <div class="qa-item">
+        <span class="qa-q">Q. 外部業者へのFAXで入居者様の実名を隠したい（個人情報保護）。</span>
+        <span class="qa-a">A. FAX画面下部の「🔒 FAX印字で個人名をマスキングする」をONにすると、自動で「[ユニット名] (個人分)」に置き換わります。</span>
+      </div>
+      <div class="qa-item">
+        <span class="qa-q">Q. 普段「履歴クリア」は押した方がいいですか？</span>
+        <span class="qa-a">A. いいえ、普段はクリアせずそのまま蓄積させてください。履歴があっても承認画面は散らからず、過去ログとして役立ちます。</span>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

@@ -1074,6 +1074,20 @@
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 bg-amber-950/20 backdrop-blur-md p-1.5 rounded-2xl border border-amber-300/20">
+                  
+                  <div className="flex items-center gap-1 border-l border-white/20 pl-1.5 ml-1">
+                    <a href="manual_staff.pdf" target="_blank" rel="noopener noreferrer"
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-amber-100 hover:text-white hover:bg-white/20 transition-all flex items-center gap-1"
+                      title="ユニット職員用 かんたん操作マニュアル (PDF)">
+                      📖 職員用
+                    </a>
+                    <a href="manual_nutritionist.pdf" target="_blank" rel="noopener noreferrer"
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-amber-100 hover:text-white hover:bg-white/20 transition-all flex items-center gap-1"
+                      title="管理栄養士用 承認・FAX発行マニュアル (PDF)">
+                      📖 栄養士用
+                    </a>
+                  </div>
+    
                   {navTabs.map(tab => (
                     <button key={tab.key} onClick={() => {
                         setShowFaxModal(false);
